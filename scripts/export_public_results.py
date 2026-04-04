@@ -5,6 +5,7 @@ import argparse
 import csv
 import json
 import shutil
+from copy import deepcopy
 from pathlib import Path
 
 
@@ -99,24 +100,26 @@ def relative_artifact(path: Path) -> str:
     return path.relative_to(PROJECT_ROOT).as_posix()
 
 
-def load_existing_tracks() -> dict[str, dict]:
+def load_existing_registry() -> dict:
     registry_path = PUBLIC_ROOT / "experiment_registry.json"
     if not registry_path.exists():
         return {}
-    registry = read_json(registry_path)
+    return read_json(registry_path)
+
+
+def load_existing_tracks(existing_registry: dict) -> dict[str, dict]:
+    if not existing_registry:
+        return {}
+    registry = existing_registry
     return {track["id"]: track for track in registry.get("tracks", [])}
 
 
 def with_fallback(track_id: str, exporter, existing_tracks: dict[str, dict], allow_missing_sources: bool) -> dict:
     try:
         return exporter()
-    except FileNotFoundError as exc:
+    except FileNotFoundError:
         if allow_missing_sources and track_id in existing_tracks:
-            track = dict(existing_tracks[track_id])
-            warnings = list(track.get("warnings", []))
-            warnings.append(f"Reused previous public metadata because a local source was unavailable: {exc}")
-            track["warnings"] = warnings
-            return track
+            return deepcopy(existing_tracks[track_id])
         raise
 
 
@@ -415,7 +418,7 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
     }
 
 
-def copy_selected_previews() -> list[dict]:
+def copy_selected_previews(existing_registry: dict, allow_missing_sources: bool) -> list[dict]:
     preview_specs = [
         (
             RUNS_ROOT / "segformer_boundary_semisup_macos" / "preview" / "phase3_iter0_best4.png",
@@ -440,8 +443,10 @@ def copy_selected_previews() -> list[dict]:
     ]
 
     copied = []
+    missing_sources = False
     for source, destination in preview_specs:
         if not source.exists():
+            missing_sources = True
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
@@ -452,12 +457,17 @@ def copy_selected_previews() -> list[dict]:
                 "size_bytes": destination.stat().st_size,
             }
         )
+    if copied:
+        return copied
+    if allow_missing_sources and missing_sources:
+        return deepcopy(existing_registry.get("copied_previews", []))
     return copied
 
 
 def main() -> int:
     args = parse_args()
-    existing_tracks = load_existing_tracks()
+    existing_registry = load_existing_registry()
+    existing_tracks = load_existing_tracks(existing_registry)
 
     tracks = [
         with_fallback("advanced_baseline", export_advanced_baseline, existing_tracks, args.allow_missing_sources),
@@ -472,7 +482,7 @@ def main() -> int:
     ]
 
     benchmark_snapshot = build_benchmark_snapshot(tracks)
-    copied_previews = copy_selected_previews()
+    copied_previews = copy_selected_previews(existing_registry, args.allow_missing_sources)
 
     experiment_registry = {
         "schema_version": 1,
