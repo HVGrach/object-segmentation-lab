@@ -1,0 +1,91 @@
+name: Repo Health
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  repo-health:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install CPU PyTorch
+        run: |
+          python -m pip install --upgrade pip
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+            torch==2.11.0 torchvision==0.26.0
+
+      - name: Install project dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate tracked file sizes
+        run: |
+          python - <<'PY'
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          limit_bytes = 5 * 1024 * 1024
+          offenders = []
+          for rel in subprocess.check_output(["git", "ls-files"], text=True).splitlines():
+              path = Path(rel)
+              if path.is_file() and path.stat().st_size > limit_bytes:
+                  offenders.append((rel, path.stat().st_size))
+          if offenders:
+              for rel, size in offenders:
+                  print(f"{rel}: {size} bytes")
+              raise SystemExit("Tracked files exceed the 5 MB repository hygiene limit.")
+          PY
+
+      - name: Check forbidden strings in tracked text files
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+
+          banned = [
+              "/Users/" + "fgrach",
+              "Co" + "dex",
+              "Cl" + "aude",
+              "Per" + "plexity",
+              "AI " + "agent",
+              "AI " + "Agents",
+          ]
+          text_exts = {".md", ".txt", ".json", ".csv", ".py", ".sh", ".yml", ".yaml", ".toml"}
+
+          offenders = []
+          for rel in subprocess.check_output(["git", "ls-files"], text=True).splitlines():
+              path = Path(rel)
+              if path.suffix not in text_exts or not path.is_file():
+                  continue
+              content = path.read_text(encoding="utf-8")
+              for needle in banned:
+                  if needle in content:
+                      offenders.append((rel, needle))
+          if offenders:
+              for rel, needle in offenders:
+                  print(f"{rel}: contains forbidden string {needle!r}")
+              raise SystemExit("Tracked text files still contain forbidden strings.")
+          PY
+
+      - name: Refresh publish-safe metadata
+        run: python scripts/export_public_results.py --allow-missing-sources
+
+      - name: Check generated docs are current
+        run: python scripts/build_project_docs.py --check
+
+      - name: Smoke test key entrypoints
+        run: |
+          python scripts/train_supervised_v4.py --help
+          python scripts/predict_supervised_v4_ensemble.py --help
+          python scripts/run_lab3_ensemble_submission.py --help

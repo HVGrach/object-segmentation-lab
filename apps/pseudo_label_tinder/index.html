@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pseudo-label review</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Pseudo-label review</p>
+          <h1>Tinder-вьюер для ручного отбора масок</h1>
+          <p class="subtitle">
+            Карточки сохраняют решения локально в браузере. Стрелка влево отклоняет, вправо принимает.
+          </p>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-tile">
+            <span class="stat-label">Всего карточек</span>
+            <strong id="totalCount">0</strong>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-label">Принято</span>
+            <strong id="acceptedCount">0</strong>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-label">Отклонено</span>
+            <strong id="rejectedCount">0</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="card-panel">
+          <div class="card-toolbar">
+            <div>
+              <span class="pill" id="progressPill">0 / 0</span>
+              <span class="pill pill-dark" id="decisionPill">No decision</span>
+            </div>
+            <label class="slider-label">
+              Маска
+              <input id="opacitySlider" type="range" min="0" max="100" value="42" />
+            </label>
+          </div>
+
+          <div class="card">
+            <div class="dice-banner">
+              <span class="dice-label">Expected Dice</span>
+              <strong id="diceValue">0.000</strong>
+            </div>
+            <canvas id="previewCanvas" width="1024" height="768"></canvas>
+          </div>
+
+          <div class="actions">
+            <button class="action action-reject" id="rejectBtn" type="button">Reject</button>
+            <button class="action action-clear" id="clearBtn" type="button">Clear</button>
+            <button class="action action-accept" id="acceptBtn" type="button">Accept</button>
+          </div>
+
+          <div class="nav-actions">
+            <button class="secondary" id="prevBtn" type="button">Previous</button>
+            <button class="secondary" id="nextBtn" type="button">Next</button>
+            <button class="secondary" id="exportJsonBtn" type="button">Export JSON</button>
+            <button class="secondary" id="exportCsvBtn" type="button">Export CSV</button>
+          </div>
+        </section>
+
+        <aside class="info-panel">
+          <section class="info-card">
+            <h2>Текущая карточка</h2>
+            <dl class="meta-grid">
+              <div>
+                <dt>ID</dt>
+                <dd id="metaId">-</dd>
+              </div>
+              <div>
+                <dt>Источник</dt>
+                <dd id="metaSource">-</dd>
+              </div>
+              <div>
+                <dt>Файл</dt>
+                <dd id="metaName">-</dd>
+              </div>
+              <div>
+                <dt>Selection score</dt>
+                <dd id="metaSelectionScore">-</dd>
+              </div>
+              <div>
+                <dt>Mean confidence</dt>
+                <dd id="metaMeanConfidence">-</dd>
+              </div>
+              <div>
+                <dt>Reliable ratio</dt>
+                <dd id="metaReliableRatio">-</dd>
+              </div>
+              <div>
+                <dt>FG reliable ratio</dt>
+                <dd id="metaFgReliableRatio">-</dd>
+              </div>
+              <div>
+                <dt>Object ratio</dt>
+                <dd id="metaObjectRatio">-</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="info-card">
+            <h2>Управление</h2>
+            <ul class="hotkeys">
+              <li><kbd>←</kbd> Reject</li>
+              <li><kbd>→</kbd> Accept</li>
+              <li><kbd>Backspace</kbd> Clear decision</li>
+              <li><kbd>↑</kbd> Previous</li>
+              <li><kbd>↓</kbd> Next</li>
+              <li><kbd>E</kbd> Export CSV and JSON</li>
+            </ul>
+          </section>
+
+          <section class="info-card">
+            <h2>Сводка</h2>
+            <pre id="summaryBlock">Loading…</pre>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+python scripts/export_public_results.py --allow-missing-sources
+python scripts/build_project_docs.py
+
+git add artifacts/public README.md docs/generated docs/experiment_registry.md
+
+if ! git diff --cached --quiet -- artifacts/public README.md docs/generated docs/experiment_registry.md; then
+  echo "Generated public metadata or docs changed during pre-push."
+  echo "The updated files have been staged. Commit them and push again."
+  exit 1
+fi

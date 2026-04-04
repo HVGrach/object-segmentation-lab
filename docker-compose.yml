@@ -1,0 +1,24 @@
+services:
+  workspace:
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lab-object-segmentation:local
+    container_name: lab-object-segmentation
+    working_dir: /workspace
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    environment:
+      JUPYTER_PORT: 8888
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-lab-object-segmentation}
+      PYTHONPATH: /workspace
+    volumes:
+      - lab1-data:/workspace/dl-lab-1-image-classification
+      - lab3-data:/workspace/dl-lab-3-product-segmentation
+    stdin_open: true
+    tty: true
+
+volumes:
+  lab1-data:
+  lab3-data:

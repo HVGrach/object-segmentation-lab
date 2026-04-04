@@ -1,0 +1,611 @@
+{
+  "schema_version": 1,
+  "tracks": [
+    {
+      "id": "advanced_baseline",
+      "title": "Advanced Baseline",
+      "status": "working",
+      "category": "supervised",
+      "headline": "Safest reproducible pipeline with grouped-by-camera CV, threshold tuning, TTA, and a lightweight ensemble.",
+      "key_results": {
+        "best_single_model": {
+          "name": "fpn_resnet34",
+          "oof_dice": 0.8380353893339634,
+          "oof_iou": 0.7581554671525955,
+          "best_threshold": 0.65
+        },
+        "best_ensemble": {
+          "candidate_name": "regression_weights",
+          "oof_dice": 0.8390599061250686,
+          "oof_iou": 0.7599045597910881,
+          "best_threshold": 0.4
+        },
+        "submission": {
+          "num_images": 2000,
+          "device": "mps",
+          "tta_enabled": true
+        }
+      },
+      "artifacts": [
+        "artifacts/runs/advanced_baseline/ensemble_summary.json",
+        "artifacts/runs/advanced_baseline/model_summaries.csv",
+        "artifacts/runs/advanced_baseline/folds_summary.json",
+        "artifacts/runs/advanced_baseline/submission_lab3_test_images_mps_summary.json"
+      ],
+      "commands": {
+        "smoke": "python scripts/run_lab3_ensemble_submission.py --limit 5",
+        "full_inference": "python scripts/run_lab3_ensemble_submission.py"
+      },
+      "details": {
+        "selected_models": [
+          "fpn_resnet34",
+          "unet_resnet34",
+          "unetpp_resnet34"
+        ],
+        "weights_by_model": {
+          "unetpp_resnet34": 0.32576772229852646,
+          "fpn_resnet34": 0.41555491363092684,
+          "unet_resnet34": 0.25867736407054676
+        },
+        "candidate_rankings": [
+          {
+            "weights_by_model": {
+              "fpn_resnet34": 1.0
+            },
+            "best_threshold": 0.65,
+            "oof_best_dice": 0.8380353893339634,
+            "oof_best_iou": 0.7581554671525955,
+            "selected_models": [
+              "fpn_resnet34"
+            ],
+            "candidate_name": "best_single"
+          },
+          {
+            "weights_by_model": {
+              "unetpp_resnet34": 0.3333333333333333,
+              "fpn_resnet34": 0.3333333333333333,
+              "unet_resnet34": 0.3333333333333333
+            },
+            "best_threshold": 0.3,
+            "oof_best_dice": 0.8316988875865936,
+            "oof_best_iou": 0.7485079618692398,
+            "selected_models": [
+              "fpn_resnet34",
+              "unet_resnet34",
+              "unetpp_resnet34"
+            ],
+            "candidate_name": "equal_all_models"
+          },
+          {
+            "weights_by_model": {
+              "fpn_resnet34": 0.5,
+              "unetpp_resnet34": 0.5
+            },
+            "best_threshold": 0.45,
+            "oof_best_dice": 0.8386460545659066,
+            "oof_best_iou": 0.7601894487142563,
+            "selected_models": [
+              "fpn_resnet34",
+              "unetpp_resnet34"
+            ],
+            "candidate_name": "top2_equal"
+          },
+          {
+            "weights_by_model": {
+              "unetpp_resnet34": 0.32576772229852646,
+              "fpn_resnet34": 0.41555491363092684,
+              "unet_resnet34": 0.25867736407054676
+            },
+            "best_threshold": 0.4,
+            "oof_best_dice": 0.8390599061250686,
+            "oof_best_iou": 0.7599045597910881,
+            "selected_models": [
+              "fpn_resnet34",
+              "unet_resnet34",
+              "unetpp_resnet34"
+            ],
+            "candidate_name": "regression_weights"
+          }
+        ]
+      }
+    },
+    {
+      "id": "supervised_v4",
+      "title": "Supervised V4",
+      "status": "working",
+      "category": "supervised",
+      "headline": "Strongest supervised-only track built around SegFormer-B2 and a custom V4 decoder.",
+      "key_results": {
+        "best_run": {
+          "run_name": "segformer_b2_fold1_384_finetune_from_moderate",
+          "fold": 1,
+          "image_size": 384,
+          "aug": "moderate",
+          "mask_loss": "dice_focal",
+          "dice_tuned": 0.8958750763299083,
+          "dice": 0.8898094141333135,
+          "mIoU": 0.9013437319030186,
+          "best_threshold": 0.75,
+          "tta": true
+        },
+        "best_oof_ensemble": {
+          "preset": "wide6",
+          "threshold": 0.5,
+          "dice": 0.866759883242149,
+          "iou": 0.7930754936197527,
+          "n_samples": 2000
+        },
+        "best_checkpoint_soup": {
+          "name": "moderate_0.75_heavy_0.25",
+          "mIoU": 0.9008051427341905,
+          "dice": 0.8887924016961049,
+          "dice_tuned": 0.893569225238452,
+          "best_threshold": 0.85,
+          "pixel_acc": 0.9846971998632155,
+          "boundary_f1": 0.07065178976483284,
+          "loss": 0.14024657398462295,
+          "tta": false
+        },
+        "submission": {
+          "preset": "wide6",
+          "num_images": 2000,
+          "device": "mps",
+          "tta_enabled": true,
+          "threshold": 0.5
+        }
+      },
+      "artifacts": [
+        "artifacts/runs/supervised_v4/oof_ensemble_eval.json",
+        "artifacts/runs/supervised_v4/checkpoint_soup_fold1_eval.json",
+        "artifacts/runs/supervised_v4/submission_supervised_v4_wide6_thr50_summary.json"
+      ],
+      "commands": {
+        "smoke": "python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5",
+        "train_help": "python scripts/train_supervised_v4.py --help"
+      },
+      "details": {
+        "top_runs_by_dice_tuned": [
+          {
+            "run_name": "segformer_b2_fold1_384_finetune_from_moderate",
+            "fold": 1,
+            "image_size": 384,
+            "aug": "moderate",
+            "mask_loss": "dice_focal",
+            "dice_tuned": 0.8958750763299083,
+            "dice": 0.8898094141333135,
+            "mIoU": 0.9013437319030186,
+            "best_threshold": 0.75,
+            "tta": true
+          },
+          {
+            "run_name": "segformer_b2_fold1_320_moderate_lovasz_ls003_ema",
+            "fold": 1,
+            "image_size": 320,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "dice_tuned": 0.8944630710232085,
+            "dice": 0.8923951576160347,
+            "mIoU": 0.9042598064324275,
+            "best_threshold": 0.55,
+            "tta": true
+          },
+          {
+            "run_name": "segformer_b2_fold1_384_finetune_lovasz",
+            "fold": 1,
+            "image_size": 384,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "dice_tuned": 0.8916195985951128,
+            "dice": 0.8885664781144037,
+            "mIoU": 0.9007803121441316,
+            "best_threshold": 0.6,
+            "tta": true
+          },
+          {
+            "run_name": "segformer_b2_fold0_320_moderate_lovasz_ls003_ema",
+            "fold": 0,
+            "image_size": 320,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "dice_tuned": 0.891379806641372,
+            "dice": 0.8897263998734615,
+            "mIoU": 0.8958182591429744,
+            "best_threshold": 0.45,
+            "tta": true
+          },
+          {
+            "run_name": "segformer_b2_fold1_320_moderate_ls003_ema",
+            "fold": 1,
+            "image_size": 320,
+            "aug": "moderate",
+            "mask_loss": "dice_focal",
+            "dice_tuned": 0.8913428257223409,
+            "dice": 0.8849110663497665,
+            "mIoU": 0.8974502627102363,
+            "best_threshold": 0.7,
+            "tta": true
+          },
+          {
+            "run_name": "segformer_b2_fold1_320_heavy80_sched_ls005_ema",
+            "fold": 1,
+            "image_size": 320,
+            "aug": "heavy",
+            "mask_loss": "dice_focal",
+            "dice_tuned": 0.8910127251948242,
+            "dice": 0.8842276550267006,
+            "mIoU": 0.896713258972409,
+            "best_threshold": 0.75,
+            "tta": true
+          }
+        ],
+        "oof_grid": [
+          {
+            "preset": "conservative3",
+            "threshold": 0.4,
+            "dice": 0.86309868667425,
+            "iou": 0.7871284531876277,
+            "n_samples": 2000
+          },
+          {
+            "preset": "conservative3",
+            "threshold": 0.45,
+            "dice": 0.8657366224693899,
+            "iou": 0.7915243888719914,
+            "n_samples": 2000
+          },
+          {
+            "preset": "conservative3",
+            "threshold": 0.5,
+            "dice": 0.8653522277137805,
+            "iou": 0.7920351169450927,
+            "n_samples": 2000
+          },
+          {
+            "preset": "conservative3",
+            "threshold": 0.55,
+            "dice": 0.8618486618592718,
+            "iou": 0.7882072899367428,
+            "n_samples": 2000
+          },
+          {
+            "preset": "conservative3",
+            "threshold": 0.6,
+            "dice": 0.8550172596515507,
+            "iou": 0.7803520725841191,
+            "n_samples": 2000
+          },
+          {
+            "preset": "lovasz3",
+            "threshold": 0.4,
+            "dice": 0.8623663428719092,
+            "iou": 0.7860344610361257,
+            "n_samples": 2000
+          },
+          {
+            "preset": "lovasz3",
+            "threshold": 0.45,
+            "dice": 0.8656847507536805,
+            "iou": 0.7916241318461582,
+            "n_samples": 2000
+          },
+          {
+            "preset": "lovasz3",
+            "threshold": 0.5,
+            "dice": 0.8656073320139428,
+            "iou": 0.7927336178337675,
+            "n_samples": 2000
+          },
+          {
+            "preset": "lovasz3",
+            "threshold": 0.55,
+            "dice": 0.8619715691962616,
+            "iou": 0.7888338115979283,
+            "n_samples": 2000
+          },
+          {
+            "preset": "lovasz3",
+            "threshold": 0.6,
+            "dice": 0.8544541737377773,
+            "iou": 0.7800106268003598,
+            "n_samples": 2000
+          },
+          {
+            "preset": "blend4",
+            "threshold": 0.4,
+            "dice": 0.863318694660396,
+            "iou": 0.7874457333879522,
+            "n_samples": 2000
+          },
+          {
+            "preset": "blend4",
+            "threshold": 0.45,
+            "dice": 0.866187010992354,
+            "iou": 0.7921738526922328,
+            "n_samples": 2000
+          },
+          {
+            "preset": "blend4",
+            "threshold": 0.5,
+            "dice": 0.8658271571854136,
+            "iou": 0.7927780687757656,
+            "n_samples": 2000
+          },
+          {
+            "preset": "blend4",
+            "threshold": 0.55,
+            "dice": 0.862226319555633,
+            "iou": 0.7889788442736125,
+            "n_samples": 2000
+          },
+          {
+            "preset": "blend4",
+            "threshold": 0.6,
+            "dice": 0.855321484141478,
+            "iou": 0.7810092841683577,
+            "n_samples": 2000
+          },
+          {
+            "preset": "wide6",
+            "threshold": 0.4,
+            "dice": 0.8641153123226734,
+            "iou": 0.7881120332814916,
+            "n_samples": 2000
+          },
+          {
+            "preset": "wide6",
+            "threshold": 0.45,
+            "dice": 0.8665189485746848,
+            "iou": 0.7919238124263022,
+            "n_samples": 2000
+          },
+          {
+            "preset": "wide6",
+            "threshold": 0.5,
+            "dice": 0.866759883242149,
+            "iou": 0.7930754936197527,
+            "n_samples": 2000
+          },
+          {
+            "preset": "wide6",
+            "threshold": 0.55,
+            "dice": 0.8656164967617366,
+            "iou": 0.7922434655420156,
+            "n_samples": 2000
+          },
+          {
+            "preset": "wide6",
+            "threshold": 0.6,
+            "dice": 0.8627716854344071,
+            "iou": 0.7890250747971217,
+            "n_samples": 2000
+          }
+        ]
+      }
+    },
+    {
+      "id": "segformer_boundary_semisup_macos",
+      "title": "SegFormer Boundary Semi-Supervised",
+      "status": "research",
+      "category": "semi-supervised",
+      "headline": "Boundary-aware SegFormer-B2 teacher-student pipeline with pseudo-label filtering and EMA.",
+      "key_results": {
+        "best_supervised_phase": {
+          "epoch": 50,
+          "val_mIoU": 0.9031246800649837,
+          "val_pixel_acc": 0.9810050202235499,
+          "val_boundary_f1": 0.07409165679631424
+        },
+        "best_semi_supervised_iteration": {
+          "iteration": 0,
+          "phase2_summary": {
+            "iteration": 0,
+            "num_total": 12742,
+            "num_accepted": 12702,
+            "accepted_percent": 0.9968607753884791,
+            "avg_confidence_accepted": 0.9536282104772764,
+            "avg_object_ratio_accepted": 0.32127732457015046
+          },
+          "phase3_best_mIoU": 0.9047450744081909,
+          "delta_mIoU": 0.0016203943432071544
+        },
+        "stricter_pseudo_filtering": {
+          "iteration": 0,
+          "num_total": 12742,
+          "num_candidates_after_thresholds": 4925,
+          "num_accepted": 3215,
+          "accepted_percent": 0.2523151781509967,
+          "avg_confidence_accepted": 0.97608855729155,
+          "avg_object_ratio_accepted": 0.26653892259684603,
+          "avg_fg_reliable_ratio_accepted": 0.8915333129636245,
+          "accepted_by_source": {
+            "dl-lab-1-image-classification::train": 2379,
+            "dl-lab-1-image-classification::test_images": 621,
+            "lab_unlabeled": 215
+          }
+        },
+        "review_bundle": {
+          "num_items": 3215,
+          "source_breakdown": {
+            "dl-lab-1-image-classification::test_images": 621,
+            "dl-lab-1-image-classification::train": 2379,
+            "lab_unlabeled": 215
+          },
+          "dice_holdout_r2": 0.8733402064485057,
+          "dice_holdout_rmse": 0.050272551879223144
+        },
+        "submission": {
+          "num_images": 2000,
+          "device": "mps",
+          "tta_n": 8
+        }
+      },
+      "artifacts": [
+        "artifacts/runs/segformer_boundary_semisup_macos/metrics/phase1_history.json",
+        "artifacts/runs/segformer_boundary_semisup_macos/metrics/iteration_summaries.json",
+        "artifacts/runs/segformer_boundary_semisup_macos/submission_lab3_test_images_segformer_summary.json",
+        "artifacts/deliverables/pseudo_label_review_bundle/bundle_manifest.json"
+      ],
+      "commands": {
+        "smoke": "python scripts/run_segformer_semisup_smoke_test.py",
+        "submission_smoke": "python scripts/run_lab3_segformer_submission.py --limit 5"
+      },
+      "details": {
+        "iteration_summaries": [
+          {
+            "iteration": 0,
+            "phase2_summary": {
+              "iteration": 0,
+              "num_total": 12742,
+              "num_accepted": 12702,
+              "accepted_percent": 0.9968607753884791,
+              "avg_confidence_accepted": 0.9536282104772764,
+              "avg_object_ratio_accepted": 0.32127732457015046
+            },
+            "phase3_best_mIoU": 0.9047450744081909,
+            "delta_mIoU": 0.0016203943432071544
+          },
+          {
+            "iteration": 1,
+            "phase2_summary": {
+              "iteration": 1,
+              "num_total": 12742,
+              "num_accepted": 11249,
+              "accepted_percent": 0.8828284413749804,
+              "avg_confidence_accepted": 0.9348056508187284,
+              "avg_object_ratio_accepted": 0.2715022532189936
+            },
+            "phase3_best_mIoU": 0.8655902481191522,
+            "delta_mIoU": -0.03915482628903866
+          }
+        ],
+        "submission_preview": [
+          {
+            "image_name": "10.107.215.111_20260119142748_a0be018c-d498-4bf8-8996-823f051bab85_4353751_ip_00011.jpg",
+            "image_path": "dataset::lab3/10.107.215.111_20260119142748_a0be018c-d498-4bf8-8996-823f051bab85_4353751_ip_00011.jpg",
+            "mask_path": "artifacts/runs/segformer_boundary_semisup_macos/submission_outputs/test_images_lab3/10.107.215.111_20260119142748_a0be018c-d498-4bf8-8996-823f051bab85_4353751_ip_00011.png",
+            "area_ratio": 0.114404296875,
+            "mean_confidence": 0.9672337174415588
+          },
+          {
+            "image_name": "10.107.215.111_20260119203335_58a6ef5c-c360-4eb6-91e0-1955e046edbb_809_ip_00011.jpg",
+            "image_path": "dataset::lab3/10.107.215.111_20260119203335_58a6ef5c-c360-4eb6-91e0-1955e046edbb_809_ip_00011.jpg",
+            "mask_path": "artifacts/runs/segformer_boundary_semisup_macos/submission_outputs/test_images_lab3/10.107.215.111_20260119203335_58a6ef5c-c360-4eb6-91e0-1955e046edbb_809_ip_00011.png",
+            "area_ratio": 0.1408203125,
+            "mean_confidence": 0.9683813452720642
+          },
+          {
+            "image_name": "10.107.215.111_20260119203341_bb74ac11-3f14-4a13-903a-f16603fc99a3_47642_ip_00011.jpg",
+            "image_path": "dataset::lab3/10.107.215.111_20260119203341_bb74ac11-3f14-4a13-903a-f16603fc99a3_47642_ip_00011.jpg",
+            "mask_path": "artifacts/runs/segformer_boundary_semisup_macos/submission_outputs/test_images_lab3/10.107.215.111_20260119203341_bb74ac11-3f14-4a13-903a-f16603fc99a3_47642_ip_00011.png",
+            "area_ratio": 0.142646484375,
+            "mean_confidence": 0.9635517597198486
+          },
+          {
+            "image_name": "10.107.215.111_20260122115937_db9b4af5-0f1e-4295-aea6-966aaba7f5db_4377047_ip_00011.jpg",
+            "image_path": "dataset::lab3/10.107.215.111_20260122115937_db9b4af5-0f1e-4295-aea6-966aaba7f5db_4377047_ip_00011.jpg",
+            "mask_path": "artifacts/runs/segformer_boundary_semisup_macos/submission_outputs/test_images_lab3/10.107.215.111_20260122115937_db9b4af5-0f1e-4295-aea6-966aaba7f5db_4377047_ip_00011.png",
+            "area_ratio": 0.0256640625,
+            "mean_confidence": 0.99139404296875
+          },
+          {
+            "image_name": "10.107.215.111_20260124135952_6fd575ec-50e8-4fd4-b0a8-468be419301b_198_ip_00011.jpg",
+            "image_path": "dataset::lab3/10.107.215.111_20260124135952_6fd575ec-50e8-4fd4-b0a8-468be419301b_198_ip_00011.jpg",
+            "mask_path": "artifacts/runs/segformer_boundary_semisup_macos/submission_outputs/test_images_lab3/10.107.215.111_20260124135952_6fd575ec-50e8-4fd4-b0a8-468be419301b_198_ip_00011.png",
+            "area_ratio": 0.186201171875,
+            "mean_confidence": 0.9219158887863159
+          }
+        ]
+      }
+    },
+    {
+      "id": "dinov2_research",
+      "title": "DINOv2 Research",
+      "status": "research",
+      "category": "proxy-research",
+      "headline": "Frozen DINOv2 feature-cache track used for low-cost fusion ablations and hypothesis screening.",
+      "key_results": {
+        "best_ablation": {
+          "experiment": "ablation_concat_s",
+          "fusion": "concat",
+          "backbone": "dinov2_s",
+          "best_val_iou": 0.7224,
+          "best_val_dice": 0.8375,
+          "best_epoch": 9
+        }
+      },
+      "artifacts": [
+        "artifacts/runs/dinov2_research/results_table.csv"
+      ],
+      "commands": {
+        "smoke": "python scripts/run_dinov2_smoke_test.py --overwrite-cache",
+        "funnel": "python scripts/run_dinov2_funnel.py --cache-missing"
+      },
+      "details": {
+        "leaderboard": [
+          {
+            "experiment": "ablation_concat_s",
+            "fusion": "concat",
+            "backbone": "dinov2_s",
+            "best_val_iou": 0.7224,
+            "best_val_dice": 0.8375
+          },
+          {
+            "experiment": "ablation_prototype_s",
+            "fusion": "prototype_cosine",
+            "backbone": "dinov2_s",
+            "best_val_iou": 0.7159,
+            "best_val_dice": 0.8334
+          },
+          {
+            "experiment": "ablation_film_s",
+            "fusion": "film",
+            "backbone": "dinov2_s",
+            "best_val_iou": 0.7132,
+            "best_val_dice": 0.8312
+          },
+          {
+            "experiment": "ablation_corr_s",
+            "fusion": "correlation_4d",
+            "backbone": "dinov2_s",
+            "best_val_iou": 0.4967,
+            "best_val_dice": 0.6592
+          },
+          {
+            "experiment": "smoke_metal_film_s",
+            "fusion": "film",
+            "backbone": "dinov2_s",
+            "best_val_iou": 0.096,
+            "best_val_dice": 0.1724
+          }
+        ]
+      }
+    }
+  ],
+  "copied_previews": [
+    {
+      "source": "artifacts/runs/segformer_boundary_semisup_macos/preview/phase3_iter0_best4.png",
+      "public_path": "artifacts/public/previews/segformer/phase3_iter0_best4.png",
+      "size_bytes": 1202412
+    },
+    {
+      "source": "artifacts/runs/segformer_boundary_semisup_macos/preview/phase3_iter0_worst4.png",
+      "public_path": "artifacts/public/previews/segformer/phase3_iter0_worst4.png",
+      "size_bytes": 735184
+    },
+    {
+      "source": "artifacts/deliverables/pseudo_label_review_bundle/demo/demo_card_1.png",
+      "public_path": "artifacts/public/previews/review_bundle/demo_card_1.png",
+      "size_bytes": 235622
+    },
+    {
+      "source": "artifacts/deliverables/pseudo_label_review_bundle/demo/demo_card_2.png",
+      "public_path": "artifacts/public/previews/review_bundle/demo_card_2.png",
+      "size_bytes": 277791
+    },
+    {
+      "source": "artifacts/deliverables/pseudo_label_review_bundle/demo/demo_card_3.png",
+      "public_path": "artifacts/public/previews/review_bundle/demo_card_3.png",
+      "size_bytes": 113794
+    }
+  ]
+}

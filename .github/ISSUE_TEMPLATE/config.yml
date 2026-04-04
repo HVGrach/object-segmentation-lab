@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Experiment registry
+    url: https://github.com/HVGrach/object-segmentation-lab/blob/main/docs/experiment_registry.md
+    about: Check the current benchmark snapshot and tracked experiment summaries before opening a new issue.

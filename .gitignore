@@ -1,0 +1,52 @@
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local env
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Local tooling / credentials
+.claude/
+.kaggle/
+AGENTS.md
+AI_AGENT_RUNBOOK_RU.md
+READ_FIRST_PROJECT_CONTEXT_RU.md
+
+# Local-only archival notes not intended for the public repo
+docs/context/HANDOFF_PIPELINE_RU.md
+docs/experiments/TRAINING_COMPARISON_FOLD1_MODERATE_VS_HEAVY_RU.md
+docs/proposals/
+docs/research/DINOV2_RESEARCH.md
+docs/research/PERPLEXITY_PLAN_STATUS.md
+
+# Python cache
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Data and heavyweight artifacts
+data/raw/
+dl-lab-1-image-classification
+dl-lab-3-product-segmentation
+seg_runs/
+artifacts/*
+!artifacts/public/
+!artifacts/public/**
+
+# Weights, caches and exports
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+*.tar
+*.7z
+*.zip
+*.log

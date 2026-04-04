@@ -1,0 +1,39 @@
+name: Implementation task
+description: Track a code change, refactor, or new implementation item.
+title: "[Implementation] "
+labels:
+  - implementation
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be implemented or changed?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is explicitly in scope and out of scope?
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Which smoke checks, scripts, or docs should confirm the change?
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Affected artifacts
+      description: List any run summaries, generated docs, or output manifests that should be updated.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Expected impact
+      description: What should improve, and what regressions need attention?
+    validations:
+      required: true

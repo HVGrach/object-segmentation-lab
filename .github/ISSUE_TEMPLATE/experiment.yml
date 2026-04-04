@@ -1,0 +1,56 @@
+name: Experiment report
+description: Record a new experiment, result, or evaluation run.
+title: "[Experiment] "
+labels:
+  - experiment
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What hypothesis or question is this experiment addressing?
+    validations:
+      required: true
+  - type: dropdown
+    id: track
+    attributes:
+      label: Track
+      options:
+        - advanced_baseline
+        - supervised_v4
+        - segformer_boundary_semisup_macos
+        - dinov2_research
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands
+      description: Paste the exact local command(s) used for the run.
+      placeholder: python scripts/train_supervised_v4.py ...
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Artifacts
+      description: Which summaries, metrics files, or previews confirm the result?
+    validations:
+      required: true
+  - type: textarea
+    id: findings
+    attributes:
+      label: Findings
+      description: What changed, improved, regressed, or was learned?
+    validations:
+      required: true
+  - type: dropdown
+    id: publish
+    attributes:
+      label: Public metadata updated
+      options:
+        - "yes"
+        - "no"
+    validations:
+      required: true

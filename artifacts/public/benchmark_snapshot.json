@@ -1,0 +1,58 @@
+{
+  "highlights": [
+    {
+      "label": "Safest reproducible path",
+      "track_id": "advanced_baseline",
+      "track_title": "Advanced Baseline",
+      "metric": "OOF Dice 0.8391",
+      "note": "Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA."
+    },
+    {
+      "label": "Strongest supervised signal",
+      "track_id": "supervised_v4",
+      "track_title": "Supervised V4",
+      "metric": "dice_tuned 0.8959",
+      "note": "segformer_b2_fold1_384_finetune_from_moderate"
+    },
+    {
+      "label": "Best semi-supervised local result",
+      "track_id": "segformer_boundary_semisup_macos",
+      "track_title": "SegFormer Boundary Semi-Supervised",
+      "metric": "val_mIoU 0.9047",
+      "note": "Iteration 0 improved over the supervised phase, iteration 1 regressed."
+    },
+    {
+      "label": "Best proxy-research result",
+      "track_id": "dinov2_research",
+      "track_title": "DINOv2 Research",
+      "metric": "best_val_iou 0.7224",
+      "note": "concat fusion on dinov2_s."
+    }
+  ],
+  "table": [
+    {
+      "track": "Advanced Baseline",
+      "status": "working",
+      "headline_metric": "OOF Dice 0.8391",
+      "entrypoint": "python scripts/run_lab3_ensemble_submission.py --limit 5"
+    },
+    {
+      "track": "Supervised V4",
+      "status": "working",
+      "headline_metric": "dice_tuned 0.8959",
+      "entrypoint": "python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5"
+    },
+    {
+      "track": "SegFormer Boundary Semi-Supervised",
+      "status": "research",
+      "headline_metric": "val_mIoU 0.9047",
+      "entrypoint": "python scripts/run_segformer_semisup_smoke_test.py"
+    },
+    {
+      "track": "DINOv2 Research",
+      "status": "research",
+      "headline_metric": "best_val_iou 0.7224",
+      "entrypoint": "python scripts/run_dinov2_smoke_test.py --overwrite-cache"
+    }
+  ]
+}

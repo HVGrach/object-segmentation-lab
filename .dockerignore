@@ -1,0 +1,15 @@
+.DS_Store
+.git
+.gitignore
+.kaggle
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Kaggle-downloadable source datasets are intentionally excluded
+# from the image build context.
+dl-lab-1-image-classification/
+dl-lab-3-product-segmentation/
