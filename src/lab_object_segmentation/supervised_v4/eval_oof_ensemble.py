@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,6 +37,12 @@ from lab_object_segmentation.supervised_v4.train import (
     split_samples_by_fold,
     upsample_logits,
 )
+from lab_object_segmentation.supervised_v4.ensemble import (
+    AGGREGATION_CHOICES,
+    PRESET_MEMBERS,
+    aggregate_probability_maps,
+    resolve_member_specs,
+)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 RUN_ROOT = RUNS_ROOT / "supervised_v4"
@@ -57,33 +62,6 @@ RUN_FOLD_MAP = {
     "segformer_b2_fold2_320_moderate_lovasz_ls003_ema": 2,
     "segformer_b2_fold2_384_finetune": 2,
     "segformer_b2_fold2_384_finetune_lovasz": 2,
-}
-
-PRESET_MEMBERS = {
-    "conservative3": [
-        ("segformer_b2_fold0_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-        ("segformer_b2_fold1_384_finetune_from_moderate", 1.0 / 3.0),
-        ("segformer_b2_fold2_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-    ],
-    "blend4": [
-        ("segformer_b2_fold0_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-        ("segformer_b2_fold1_384_finetune_from_moderate", 1.0 / 6.0),
-        ("segformer_b2_fold1_320_moderate_lovasz_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold2_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-    ],
-    "lovasz3": [
-        ("segformer_b2_fold0_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-        ("segformer_b2_fold1_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-        ("segformer_b2_fold2_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-    ],
-    "wide6": [
-        ("segformer_b2_fold0_320_moderate_lovasz_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold0_320_moderate_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold1_320_moderate_lovasz_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold1_384_finetune_from_moderate", 1.0 / 6.0),
-        ("segformer_b2_fold2_320_moderate_lovasz_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold2_320_moderate_ls003_ema", 1.0 / 6.0),
-    ],
 }
 
 
@@ -112,7 +90,7 @@ def load_model(run_name: str, weight: float, device: torch.device) -> LoadedMode
     fold = RUN_FOLD_MAP.get(run_name)
     if fold is None:
         fold = config.fold
-    transform = build_val_transform(config.image_size, config.image_mean, config.image_std)
+    transform = build_val_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
     return LoadedModel(run_name=run_name, fold=fold, weight=weight, model=model, config=config, transform=transform)
 
 
@@ -158,21 +136,55 @@ def compute_iou(pred: np.ndarray, gt: np.ndarray) -> float:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="OOF ensemble evaluation on val with ground truth.")
     parser.add_argument("--presets", nargs="+", default=list(PRESET_MEMBERS.keys()), help="Presets to evaluate")
+    parser.add_argument("--run-names", nargs="+", default=None, help="Optional explicit run names instead of presets.")
+    parser.add_argument("--weights", nargs="+", type=float, default=None, help="Optional weights for --run-names.")
+    parser.add_argument("--aggregations", nargs="+", choices=AGGREGATION_CHOICES, default=["weighted_mean"], help="Aggregation rules to evaluate.")
     parser.add_argument("--thresholds", nargs="+", type=float, default=[0.40, 0.45, 0.50, 0.55, 0.60], help="Thresholds to try")
+    parser.add_argument("--member-threshold", type=float, default=0.5, help="Member threshold used by hard_vote aggregation.")
+    parser.add_argument("--limit", type=int, default=None, help="Optional number of labeled samples for quick smoke screening.")
     parser.add_argument("--no-tta", action="store_true", help="Disable TTA")
+    parser.add_argument("--tta-scales", nargs="+", type=float, default=None, help="Optional override for member TTA scales.")
+    parser.add_argument("--tta-ops", choices=("flips", "d4"), default=None, help="Optional override for member TTA transforms.")
     parser.add_argument("--disable-postprocess", action="store_true", help="Disable post-processing")
+    parser.add_argument("--postprocess-min-component-area", type=int, default=128)
+    parser.add_argument("--disable-postprocess-fill-holes", action="store_true")
+    parser.add_argument("--output-path", type=Path, default=RUN_ROOT / "oof_ensemble_search.json")
     return parser.parse_args()
+
+
+def resolve_named_member_sets(args: argparse.Namespace) -> dict[str, list[tuple[str, float]]]:
+    if args.run_names is not None:
+        return {"custom": resolve_member_specs(run_names=args.run_names, weights=args.weights)}
+
+    named_sets: dict[str, list[tuple[str, float]]] = {}
+    for preset_name in args.presets:
+        named_sets[preset_name] = resolve_member_specs(preset=preset_name)
+    return named_sets
+
+
+def apply_model_inference_overrides(model: LoadedModel, args: argparse.Namespace) -> LoadedModel:
+    if args.tta_scales is not None:
+        model.config.tta_scales = [float(scale) for scale in args.tta_scales]
+    if args.tta_ops is not None:
+        model.config.tta_ops = str(args.tta_ops)
+    model.config.postprocess_enabled = not args.disable_postprocess
+    model.config.postprocess_min_component_area = int(args.postprocess_min_component_area)
+    model.config.postprocess_fill_holes = not args.disable_postprocess_fill_holes
+    return model
 
 
 def main() -> int:
     args = parse_args()
     device = get_device()
     print(f"Device: {device}")
+    named_member_sets = resolve_named_member_sets(args)
 
     # Load all samples and build fold->val_ids mapping
     images_dir = LAB3_DATASET_ROOT / "train" / "images"
     masks_dir = LAB3_DATASET_ROOT / "train" / "masks"
     all_samples = collect_labeled_pairs(images_dir, masks_dir)
+    if args.limit is not None:
+        all_samples = all_samples[: args.limit]
     print(f"Total labeled samples: {len(all_samples)}")
 
     fold_val_ids: dict[int, set[str]] = {}
@@ -185,18 +197,15 @@ def main() -> int:
 
     # Collect all unique models needed across all presets
     all_run_names: set[str] = set()
-    for preset_name in args.presets:
-        if preset_name not in PRESET_MEMBERS:
-            print(f"[WARN] Unknown preset: {preset_name}, skipping")
-            continue
-        for run_name, _ in PRESET_MEMBERS[preset_name]:
+    for member_specs in named_member_sets.values():
+        for run_name, _ in member_specs:
             all_run_names.add(run_name)
 
     print(f"\nLoading {len(all_run_names)} unique models...")
     models: dict[str, LoadedModel] = {}
     for run_name in sorted(all_run_names):
         print(f"  Loading {run_name}...")
-        models[run_name] = load_model(run_name, 1.0, device)
+        models[run_name] = apply_model_inference_overrides(load_model(run_name, 1.0, device), args)
     print("All models loaded.\n")
 
     # Pre-compute OOF probabilities: for each sample, predict with models that didn't see it
@@ -212,25 +221,14 @@ def main() -> int:
         gt_mask = (gt_mask > 127).astype(np.uint8)
         oof_gt[image_name] = gt_mask
 
-        # Which fold is this sample in the val set of?
         sample_val_fold = None
         for fold, val_ids in fold_val_ids.items():
             if image_name in val_ids:
                 sample_val_fold = fold
                 break
 
-        # Predict with all loaded models that did NOT train on this fold
-        # (i.e., models whose val_fold == sample_val_fold, meaning this sample was in their val set)
-        # Wait — actually: a model trained on fold X has fold X as its val.
-        # So sample is in val of fold X. The model trained on fold X did NOT see this sample.
-        # Models trained on OTHER folds DID see this sample in training.
-        # For OOF: we want predictions from models that did NOT see this sample in training.
-        # A model trained on fold X excludes fold X val from training.
-        # So if sample is in fold X val, the model for fold X did NOT see it -> use it.
-
         sample_probs: dict[str, np.ndarray] = {}
         for run_name, member in models.items():
-            # Only predict if this model's fold matches (sample was in its val, not train)
             if member.fold == sample_val_fold:
                 prob_map = predict_probability(member, image_rgb, device, use_tta=not args.no_tta)
                 sample_probs[run_name] = prob_map
@@ -245,92 +243,124 @@ def main() -> int:
 
     # Evaluate each preset × threshold
     print("=" * 80)
-    print(f"{'Preset':<20} {'Threshold':>10} {'Dice':>8} {'Dice_tuned':>12} {'IoU':>8} {'Samples':>8}")
+    print(f"{'Ensemble':<20} {'Agg':<14} {'Threshold':>10} {'Dice':>8} {'IoU':>8} {'Samples':>8}")
     print("=" * 80)
 
     results: list[dict] = []
 
-    for preset_name in args.presets:
-        if preset_name not in PRESET_MEMBERS:
-            continue
-        members = PRESET_MEMBERS[preset_name]
+    for member_set_name, members in named_member_sets.items():
         member_run_names = {run_name for run_name, _ in members}
         weight_map = {run_name: w for run_name, w in members}
+        representative_config = models[members[0][0]].config
 
-        best_dice_tuned = -1.0
-        best_threshold = -1.0
+        for aggregation in args.aggregations:
+            best_dice = -1.0
+            best_threshold = -1.0
 
-        for threshold in args.thresholds:
-            dices = []
-            ious = []
+            for threshold in args.thresholds:
+                dices = []
+                ious = []
 
-            for image_name, gt_mask in oof_gt.items():
-                sample_probs = oof_probs[image_name]
+                for image_name, gt_mask in oof_gt.items():
+                    sample_probs = oof_probs[image_name]
 
-                # Filter to only members in this preset that have predictions for this sample
-                eligible = {rn: prob for rn, prob in sample_probs.items() if rn in member_run_names}
-                if not eligible:
+                    eligible_items = [(rn, prob) for rn, prob in sample_probs.items() if rn in member_run_names]
+                    if not eligible_items:
+                        continue
+
+                    ensemble_prob = aggregate_probability_maps(
+                        probability_maps=[prob for _, prob in eligible_items],
+                        weights=[weight_map[rn] for rn, _ in eligible_items],
+                        aggregation=aggregation,
+                        member_threshold=args.member_threshold,
+                    )
+
+                    binary_mask = (ensemble_prob >= threshold).astype(np.uint8)
+                    if not args.disable_postprocess:
+                        pp_config = models[eligible_items[0][0]].config
+                        binary_mask = postprocess_binary_mask(binary_mask, pp_config)
+
+                    dices.append(compute_dice(binary_mask, gt_mask))
+                    ious.append(compute_iou(binary_mask, gt_mask))
+
+                if not dices:
                     continue
 
-                # Weighted average of eligible members (re-normalize weights)
-                total_w = sum(weight_map[rn] for rn in eligible)
-                if total_w <= 0:
-                    continue
+                mean_dice = float(np.mean(dices))
+                mean_iou = float(np.mean(ious))
 
-                ensemble_prob = np.zeros_like(gt_mask, dtype=np.float32)
-                for rn, prob in eligible.items():
-                    ensemble_prob += (weight_map[rn] / total_w) * prob
+                if mean_dice > best_dice:
+                    best_dice = mean_dice
+                    best_threshold = threshold
 
-                binary_mask = (ensemble_prob >= threshold).astype(np.uint8)
-                if not args.disable_postprocess:
-                    pp_config = models[next(iter(eligible))].config
-                    binary_mask = postprocess_binary_mask(binary_mask, pp_config)
+                results.append({
+                    "ensemble": member_set_name,
+                    "aggregation": aggregation,
+                    "threshold": float(threshold),
+                    "dice": mean_dice,
+                    "iou": mean_iou,
+                    "n_samples": len(dices),
+                    "tta_enabled": not args.no_tta,
+                    "tta_ops": None if args.no_tta else representative_config.tta_ops,
+                    "tta_scales": None if args.no_tta else representative_config.tta_scales,
+                    "member_threshold": float(args.member_threshold),
+                    "postprocess_enabled": not args.disable_postprocess,
+                    "postprocess_min_component_area": int(args.postprocess_min_component_area),
+                    "postprocess_fill_holes": not args.disable_postprocess_fill_holes,
+                })
 
-                dices.append(compute_dice(binary_mask, gt_mask))
-                ious.append(compute_iou(binary_mask, gt_mask))
+                marker = " <-- best" if mean_dice >= best_dice else ""
+                print(f"{member_set_name:<20} {aggregation:<14} {threshold:>10.2f} {mean_dice:>8.4f} {mean_iou:>8.4f} {len(dices):>8}{marker}")
 
-            if not dices:
-                continue
-
-            mean_dice = float(np.mean(dices))
-            mean_iou = float(np.mean(ious))
-
-            if mean_dice > best_dice_tuned:
-                best_dice_tuned = mean_dice
-                best_threshold = threshold
-
-            results.append({
-                "preset": preset_name,
-                "threshold": threshold,
-                "dice": mean_dice,
-                "iou": mean_iou,
-                "n_samples": len(dices),
-            })
-
-            marker = " <-- best" if mean_dice >= best_dice_tuned else ""
-            print(f"{preset_name:<20} {threshold:>10.2f} {mean_dice:>8.4f} {'':>12} {mean_iou:>8.4f} {len(dices):>8}{marker}")
-
-        if best_dice_tuned > 0:
-            print(f"{'':>20} {'BEST':>10} {'':>8} {best_dice_tuned:>12.4f} {'':>8} thr={best_threshold:.2f}")
-        print("-" * 80)
+            if best_dice > 0:
+                print(f"{member_set_name:<20} {aggregation:<14} {'BEST':>10} {best_dice:>8.4f} {'':>8} thr={best_threshold:.2f}")
+            print("-" * 80)
 
     # Save results
-    output_path = RUN_ROOT / "oof_ensemble_eval.json"
-    output_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"\nResults saved to: {output_path}")
+    best_per_combo: dict[tuple[str, str], dict] = {}
+    for row in results:
+        key = (row["ensemble"], row["aggregation"])
+        if key not in best_per_combo or row["dice"] > best_per_combo[key]["dice"]:
+            best_per_combo[key] = row
+
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    args.output_path.write_text(
+        json.dumps(
+            {
+                "settings": {
+                    "presets": args.presets,
+                    "run_names": args.run_names,
+                    "weights": args.weights,
+                    "aggregations": args.aggregations,
+                    "thresholds": args.thresholds,
+                    "member_threshold": float(args.member_threshold),
+                    "limit": args.limit,
+                    "tta_enabled": not args.no_tta,
+                    "tta_scales": args.tta_scales,
+                    "tta_ops": args.tta_ops,
+                    "postprocess_enabled": not args.disable_postprocess,
+                    "postprocess_min_component_area": int(args.postprocess_min_component_area),
+                    "postprocess_fill_holes": not args.disable_postprocess_fill_holes,
+                },
+                "results": results,
+                "best_per_combo": list(best_per_combo.values()),
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    print(f"\nResults saved to: {args.output_path}")
 
     # Final leaderboard
     print("\n" + "=" * 60)
-    print("LEADERBOARD (best threshold per preset)")
+    print("LEADERBOARD (best threshold per ensemble x aggregation)")
     print("=" * 60)
-    best_per_preset: dict[str, dict] = {}
-    for r in results:
-        key = r["preset"]
-        if key not in best_per_preset or r["dice"] > best_per_preset[key]["dice"]:
-            best_per_preset[key] = r
-
-    for rank, (preset, r) in enumerate(sorted(best_per_preset.items(), key=lambda x: -x[1]["dice"]), 1):
-        print(f"  #{rank} {preset:<20} dice={r['dice']:.4f}  iou={r['iou']:.4f}  thr={r['threshold']:.2f}")
+    for rank, ((ensemble_name, aggregation), row) in enumerate(sorted(best_per_combo.items(), key=lambda item: -item[1]["dice"]), 1):
+        print(
+            f"  #{rank} {ensemble_name:<20} {aggregation:<14} "
+            f"dice={row['dice']:.4f}  iou={row['iou']:.4f}  thr={row['threshold']:.2f}"
+        )
 
     print()
     return 0
