@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNS_ROOT = PROJECT_ROOT / "artifacts" / "runs"
 DELIVERABLES_ROOT = PROJECT_ROOT / "artifacts" / "deliverables"
 PUBLIC_ROOT = PROJECT_ROOT / "artifacts" / "public"
+SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH = PUBLIC_ROOT / "supervised_v4_hypothesis_suite_latest.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -105,6 +106,12 @@ def load_existing_registry() -> dict:
     if not registry_path.exists():
         return {}
     return read_json(registry_path)
+
+
+def load_existing_supervised_v4_hypothesis_summary() -> dict | None:
+    if not SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH.exists():
+        return None
+    return read_json(SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH)
 
 
 def load_existing_tracks(existing_registry: dict) -> dict[str, dict]:
@@ -209,6 +216,39 @@ def export_supervised_v4() -> dict:
         key=lambda item: (item[1]["dice_tuned"], item[1]["mIoU"]),
     )
     submission_summary = sanitize_value(read_json(run_root / "submission_supervised_v4_wide6_thr50_summary.json"))
+    latest_hypothesis_suite = export_supervised_v4_hypothesis_suite()
+
+    artifacts = [
+        relative_artifact(run_root / "oof_ensemble_eval.json"),
+        relative_artifact(run_root / "checkpoint_soup_fold1_eval.json"),
+        relative_artifact(run_root / "submission_supervised_v4_wide6_thr50_summary.json"),
+    ]
+    key_results = {
+        "best_run": best_run,
+        "best_oof_ensemble": best_oof,
+        "best_checkpoint_soup": {
+            "name": best_soup_name,
+            **best_soup_metrics,
+        },
+        "submission": {
+            "preset": "wide6",
+            "num_images": submission_summary["num_images"],
+            "device": submission_summary["device"],
+            "tta_enabled": submission_summary["tta_enabled"],
+            "threshold": submission_summary["threshold"],
+        },
+    }
+
+    if latest_hypothesis_suite is not None:
+        write_json(SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH, sanitize_value(latest_hypothesis_suite))
+        artifacts.extend(latest_hypothesis_suite["published_artifacts"])
+        key_results["latest_hypothesis_suite"] = {
+            "suite_tag": latest_hypothesis_suite["suite_tag"],
+            "takeaway": latest_hypothesis_suite["takeaway"],
+            "best_oof_overall": latest_hypothesis_suite["best_oof_overall"],
+            "best_oof_with_tta": latest_hypothesis_suite["best_oof_with_tta"],
+            "best_training_screen": latest_hypothesis_suite["best_training_screen"],
+        }
 
     return {
         "id": "supervised_v4",
@@ -216,26 +256,8 @@ def export_supervised_v4() -> dict:
         "status": "working",
         "category": "supervised",
         "headline": "Strongest supervised-only track built around SegFormer-B2 and a custom V4 decoder.",
-        "key_results": {
-            "best_run": best_run,
-            "best_oof_ensemble": best_oof,
-            "best_checkpoint_soup": {
-                "name": best_soup_name,
-                **best_soup_metrics,
-            },
-            "submission": {
-                "preset": "wide6",
-                "num_images": submission_summary["num_images"],
-                "device": submission_summary["device"],
-                "tta_enabled": submission_summary["tta_enabled"],
-                "threshold": submission_summary["threshold"],
-            },
-        },
-        "artifacts": [
-            relative_artifact(run_root / "oof_ensemble_eval.json"),
-            relative_artifact(run_root / "checkpoint_soup_fold1_eval.json"),
-            relative_artifact(run_root / "submission_supervised_v4_wide6_thr50_summary.json"),
-        ],
+        "key_results": key_results,
+        "artifacts": artifacts,
         "commands": {
             "smoke": "python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5",
             "train_help": "python scripts/train_supervised_v4.py --help",
@@ -243,7 +265,127 @@ def export_supervised_v4() -> dict:
         "details": {
             "top_runs_by_dice_tuned": sorted(run_rows, key=lambda item: (item["dice_tuned"], item["mIoU"]), reverse=True)[:6],
             "oof_grid": oof_rows,
+            "latest_hypothesis_suite_path": (
+                relative_artifact(SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH) if latest_hypothesis_suite is not None else None
+            ),
         },
+    }
+
+
+def _best_metric_row(rows: list[dict]) -> dict | None:
+    if not rows:
+        return None
+    return max(rows, key=lambda row: (to_float(row.get("dice")), to_float(row.get("iou"))))
+
+
+def _latest_hypothesis_suite_dir() -> Path | None:
+    suite_root = RUNS_ROOT / "supervised_v4" / "hypothesis_suite"
+    if not suite_root.exists():
+        return None
+    suite_dirs = [path for path in suite_root.iterdir() if path.is_dir()]
+    if not suite_dirs:
+        return None
+    return sorted(suite_dirs, key=lambda path: (path.name, path.stat().st_mtime))[-1]
+
+
+def _summarize_oof_search_file(path: Path) -> dict:
+    payload = read_json(path)
+    settings = payload.get("settings", {})
+    results = payload.get("results", [])
+    best_per_combo = payload.get("best_per_combo") or []
+    best_result = _best_metric_row(results)
+    if best_result is not None:
+        best_result = {
+            **best_result,
+            "source_file": relative_artifact(path),
+        }
+
+    return {
+        "source_file": relative_artifact(path),
+        "settings": settings,
+        "best_result": best_result,
+        "best_per_combo": sorted(
+            best_per_combo,
+            key=lambda row: (to_float(row.get("dice")), to_float(row.get("iou"))),
+            reverse=True,
+        )[:6],
+    }
+
+
+def _summarize_training_screen_run(run_dir: Path) -> dict:
+    config = read_json(run_dir / "config.json")
+    metrics = read_json(run_dir / "final_tta_metrics.json")
+    return {
+        "run_name": config.get("run_name", run_dir.name),
+        "fold": config.get("fold"),
+        "image_size": config.get("image_size"),
+        "aug": config.get("aug", "unknown"),
+        "mask_loss": infer_mask_loss(config, config.get("run_name", run_dir.name)),
+        "resize_interpolation": config.get("resize_interpolation", "linear"),
+        "finetune_from_checkpoint": bool(config.get("finetune_from")),
+        "dice_tuned": metrics["dice_tuned"],
+        "dice": metrics["dice"],
+        "mIoU": metrics["mIoU"],
+        "best_threshold": metrics["best_threshold"],
+        "tta": metrics["tta"],
+        "source_metrics_file": relative_artifact(run_dir / "final_tta_metrics.json"),
+    }
+
+
+def export_supervised_v4_hypothesis_suite() -> dict | None:
+    suite_dir = _latest_hypothesis_suite_dir()
+    if suite_dir is None:
+        return load_existing_supervised_v4_hypothesis_summary()
+
+    oof_paths = sorted(suite_dir.glob("oof_search*.json"))
+    if not oof_paths:
+        return load_existing_supervised_v4_hypothesis_summary()
+
+    oof_file_summaries = [_summarize_oof_search_file(path) for path in oof_paths]
+    oof_best_rows = [summary["best_result"] for summary in oof_file_summaries if summary["best_result"] is not None]
+    best_oof_overall = _best_metric_row(oof_best_rows)
+    best_oof_with_tta = _best_metric_row(
+        [
+            summary["best_result"]
+            for summary in oof_file_summaries
+            if summary["best_result"] is not None and summary["settings"].get("tta_enabled")
+        ]
+    )
+
+    training_screen_rows = []
+    for metrics_path in sorted((RUNS_ROOT / "supervised_v4").glob(f"screen_{suite_dir.name}_*/final_tta_metrics.json")):
+        training_screen_rows.append(_summarize_training_screen_run(metrics_path.parent))
+    training_screen_rows.sort(key=lambda row: (to_float(row.get("dice_tuned")), to_float(row.get("mIoU"))), reverse=True)
+    best_training_screen = training_screen_rows[0] if training_screen_rows else None
+
+    takeaway_parts = []
+    if best_oof_overall is not None:
+        tta_label = "with TTA" if best_oof_overall.get("tta_enabled") else "without TTA"
+        takeaway_parts.append(
+            f"{best_oof_overall['ensemble']} {best_oof_overall['aggregation']} {tta_label} reached Dice {best_oof_overall['dice']:.4f}"
+        )
+    if best_training_screen is not None:
+        takeaway_parts.append(
+            f"the strongest short screen was {best_training_screen['run_name']} with dice_tuned {best_training_screen['dice_tuned']:.4f}"
+        )
+
+    published_artifacts = [relative_artifact(SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH), relative_artifact(suite_dir / "summary.txt")]
+    if best_oof_overall is not None:
+        published_artifacts.append(best_oof_overall["source_file"])
+    if best_training_screen is not None:
+        published_artifacts.append(best_training_screen["source_metrics_file"])
+
+    return {
+        "suite_tag": suite_dir.name,
+        "suite_dir": relative_artifact(suite_dir),
+        "summary_file": relative_artifact(suite_dir / "summary.txt"),
+        "takeaway": "; ".join(takeaway_parts) if takeaway_parts else "Latest supervised_v4 hypothesis suite summary.",
+        "best_oof_overall": best_oof_overall,
+        "best_oof_with_tta": best_oof_with_tta,
+        "best_training_screen": best_training_screen,
+        "published_artifacts": published_artifacts,
+        "oof_file_summaries": oof_file_summaries,
+        "training_screen_leaderboard": training_screen_rows,
     }
 
 
@@ -357,23 +499,45 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
     supervised = track_map["supervised_v4"]
     semisup = track_map["segformer_boundary_semisup_macos"]
     dinov2 = track_map["dinov2_research"]
+    latest_hypothesis_suite = supervised["key_results"].get("latest_hypothesis_suite")
 
-    return {
-        "highlights": [
+    highlights = [
+        {
+            "label": "Safest reproducible path",
+            "track_id": advanced["id"],
+            "track_title": advanced["title"],
+            "metric": f"OOF Dice {advanced['key_results']['best_ensemble']['oof_dice']:.4f}",
+            "note": "Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA.",
+        },
+        {
+            "label": "Strongest supervised signal",
+            "track_id": supervised["id"],
+            "track_title": supervised["title"],
+            "metric": f"dice_tuned {supervised['key_results']['best_run']['dice_tuned']:.4f}",
+            "note": supervised["key_results"]["best_run"]["run_name"],
+        },
+    ]
+
+    if latest_hypothesis_suite is not None:
+        best_oof = latest_hypothesis_suite.get("best_oof_overall") or {}
+        best_screen = latest_hypothesis_suite.get("best_training_screen") or {}
+        highlights.append(
             {
-                "label": "Safest reproducible path",
-                "track_id": advanced["id"],
-                "track_title": advanced["title"],
-                "metric": f"OOF Dice {advanced['key_results']['best_ensemble']['oof_dice']:.4f}",
-                "note": "Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA.",
-            },
-            {
-                "label": "Strongest supervised signal",
+                "label": "Latest aug sweep",
                 "track_id": supervised["id"],
                 "track_title": supervised["title"],
-                "metric": f"dice_tuned {supervised['key_results']['best_run']['dice_tuned']:.4f}",
-                "note": supervised["key_results"]["best_run"]["run_name"],
-            },
+                "metric": f"OOF Dice {to_float(best_oof.get('dice')):.4f}",
+                "note": (
+                    f"{best_oof.get('ensemble', 'custom')} {best_oof.get('aggregation', 'weighted_mean')} "
+                    f"{'with TTA' if best_oof.get('tta_enabled') else 'without TTA'}; "
+                    f"best short screen {best_screen.get('run_name', 'n/a')} "
+                    f"dice_tuned {to_float(best_screen.get('dice_tuned')):.4f}."
+                ),
+            }
+        )
+
+    highlights.extend(
+        [
             {
                 "label": "Best semi-supervised local result",
                 "track_id": semisup["id"],
@@ -388,7 +552,11 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
                 "metric": f"best_val_iou {dinov2['key_results']['best_ablation']['best_val_iou']:.4f}",
                 "note": f"{dinov2['key_results']['best_ablation']['fusion']} fusion on {dinov2['key_results']['best_ablation']['backbone']}.",
             },
-        ],
+        ]
+    )
+
+    return {
+        "highlights": highlights,
         "table": [
             {
                 "track": advanced["title"],

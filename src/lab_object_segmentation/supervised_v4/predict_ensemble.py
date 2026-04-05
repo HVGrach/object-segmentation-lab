@@ -24,38 +24,17 @@ from lab_object_segmentation.supervised_v4.train import (
     predict_with_tta,
     upsample_logits,
 )
+from lab_object_segmentation.supervised_v4.ensemble import (
+    AGGREGATION_CHOICES,
+    PRESET_MEMBERS,
+    aggregate_probability_maps,
+    resolve_member_specs,
+)
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 DEFAULT_INPUT_DIR = LAB3_DATASET_ROOT / "test_images"
 DEFAULT_RUN_ROOT = RUNS_ROOT / "supervised_v4"
-
-PRESET_MEMBERS = {
-    "conservative3": [
-        ("segformer_b2_fold0_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-        ("segformer_b2_fold1_384_finetune_from_moderate", 1.0 / 3.0),
-        ("segformer_b2_fold2_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-    ],
-    "blend4": [
-        ("segformer_b2_fold0_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-        ("segformer_b2_fold1_384_finetune_from_moderate", 1.0 / 6.0),
-        ("segformer_b2_fold1_320_moderate_lovasz_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold2_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-    ],
-    "lovasz3": [
-        ("segformer_b2_fold0_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-        ("segformer_b2_fold1_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-        ("segformer_b2_fold2_320_moderate_lovasz_ls003_ema", 1.0 / 3.0),
-    ],
-    "wide6": [
-        ("segformer_b2_fold0_320_moderate_lovasz_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold0_320_moderate_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold1_320_moderate_lovasz_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold1_384_finetune_from_moderate", 1.0 / 6.0),
-        ("segformer_b2_fold2_320_moderate_lovasz_ls003_ema", 1.0 / 6.0),
-        ("segformer_b2_fold2_320_moderate_ls003_ema", 1.0 / 6.0),
-    ],
-}
 
 
 @dataclass
@@ -108,9 +87,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--preset", choices=sorted(PRESET_MEMBERS.keys()), default="blend4")
     parser.add_argument("--run-names", nargs="+", default=None, help="Optional explicit run names instead of preset members.")
     parser.add_argument("--weights", nargs="+", type=float, default=None, help="Optional weights for --run-names.")
+    parser.add_argument("--aggregation", choices=AGGREGATION_CHOICES, default="weighted_mean")
+    parser.add_argument("--member-threshold", type=float, default=0.5, help="Member threshold used by hard_vote aggregation.")
     parser.add_argument("--threshold", type=float, default=0.55)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--no-tta", action="store_true", help="Disable member-side TTA.")
+    parser.add_argument("--tta-scales", nargs="+", type=float, default=None, help="Optional override for member TTA scales.")
+    parser.add_argument("--tta-ops", choices=("flips", "d4"), default=None, help="Optional override for member TTA transforms.")
     parser.add_argument("--disable-postprocess", action="store_true", help="Disable final mask post-processing.")
     parser.add_argument("--postprocess-min-component-area", type=int, default=128)
     parser.add_argument("--disable-postprocess-fill-holes", action="store_true")
@@ -120,23 +103,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary-path", type=Path, default=None)
     return parser.parse_args()
 
+def ensemble_name(args: argparse.Namespace) -> str:
+    if args.run_names is not None:
+        return "custom"
+    return args.preset
 
-def resolve_member_specs(args: argparse.Namespace) -> list[tuple[str, float]]:
-    if args.run_names is None:
-        return list(PRESET_MEMBERS[args.preset])
 
-    run_names = [str(name) for name in args.run_names]
-    if args.weights is None:
-        weights = [1.0 / len(run_names)] * len(run_names)
-    else:
-        if len(args.weights) != len(run_names):
-            raise ValueError("weights must have the same length as run-names")
-        weights = [float(weight) for weight in args.weights]
-        total = sum(weights)
-        if total <= 0:
-            raise ValueError("weights must sum to a positive value")
-        weights = [weight / total for weight in weights]
-    return list(zip(run_names, weights))
+def apply_member_inference_overrides(member: EnsembleMember, args: argparse.Namespace) -> EnsembleMember:
+    if args.tta_scales is not None:
+        member.config.tta_scales = [float(scale) for scale in args.tta_scales]
+    if args.tta_ops is not None:
+        member.config.tta_ops = str(args.tta_ops)
+    return member
 
 
 def load_member(run_root: Path, run_name: str, weight: float, device: torch.device) -> EnsembleMember:
@@ -155,7 +133,7 @@ def load_member(run_root: Path, run_name: str, weight: float, device: torch.devi
     model.load_state_dict(state_dict, strict=True)
     model.eval()
 
-    transform = build_val_transform(config.image_size, config.image_mean, config.image_std)
+    transform = build_val_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
     return EnsembleMember(
         run_name=run_name,
         weight=float(weight),
@@ -188,7 +166,7 @@ def predict_member_probability(member: EnsembleMember, image_rgb: np.ndarray, de
 def main() -> int:
     args = parse_args()
     device = get_device()
-    member_specs = resolve_member_specs(args)
+    member_specs = resolve_member_specs(preset=args.preset, run_names=args.run_names, weights=args.weights)
 
     if not args.input_dir.exists():
         raise FileNotFoundError(f"Input directory does not exist: {args.input_dir}")
@@ -198,19 +176,16 @@ def main() -> int:
     if args.limit is not None:
         image_paths = image_paths[: args.limit]
 
-    members = [load_member(args.run_root, run_name, weight, device) for run_name, weight in member_specs]
-    weight_sum = sum(member.weight for member in members)
-    if weight_sum <= 0:
-        raise ValueError("Ensemble weights must sum to a positive value")
-    for member in members:
-        member.weight /= weight_sum
+    members = [apply_member_inference_overrides(load_member(args.run_root, run_name, weight, device), args) for run_name, weight in member_specs]
 
+    ensemble_id = ensemble_name(args)
+    threshold_id = threshold_tag(args.threshold)
     if args.output_dir is None:
-        args.output_dir = args.run_root / "ensemble_outputs" / f"{args.preset}_{threshold_tag(args.threshold)}"
+        args.output_dir = args.run_root / "ensemble_outputs" / f"{ensemble_id}_{args.aggregation}_{threshold_id}"
     if args.submission_path is None:
-        args.submission_path = args.run_root / f"submission_supervised_v4_{args.preset}_{threshold_tag(args.threshold)}.csv"
+        args.submission_path = args.run_root / f"submission_supervised_v4_{ensemble_id}_{args.aggregation}_{threshold_id}.csv"
     if args.summary_path is None:
-        args.summary_path = args.run_root / f"submission_supervised_v4_{args.preset}_{threshold_tag(args.threshold)}_summary.json"
+        args.summary_path = args.run_root / f"submission_supervised_v4_{ensemble_id}_{args.aggregation}_{threshold_id}_summary.json"
 
     postprocess_config = members[0].config
     postprocess_config.postprocess_enabled = not args.disable_postprocess
@@ -222,7 +197,9 @@ def main() -> int:
 
     print(f"Device          : {device}")
     print(f"Images          : {len(image_paths)}")
-    print(f"Preset          : {args.preset}")
+    print(f"Ensemble        : {ensemble_id}")
+    print(f"Aggregation     : {args.aggregation}")
+    print(f"Member thr      : {args.member_threshold:.2f}")
     print(f"Threshold       : {args.threshold:.2f}")
     print(f"TTA             : {not args.no_tta}")
     print(f"Post-process    : {postprocess_config.postprocess_enabled}")
@@ -239,14 +216,19 @@ def main() -> int:
 
         for index, image_path in enumerate(tqdm(image_paths, desc="Supervised-v4 ensemble inference"), 1):
             image_rgb = read_image_rgb(image_path)
-            ensemble_prob = np.zeros(image_rgb.shape[:2], dtype=np.float32)
-
+            member_probability_maps: list[np.ndarray] = []
             member_means = {}
             for member in members:
                 probability_map = predict_member_probability(member, image_rgb, device, use_tta=not args.no_tta)
-                ensemble_prob += member.weight * probability_map
+                member_probability_maps.append(probability_map)
                 member_means[member.run_name] = float(probability_map.mean())
 
+            ensemble_prob = aggregate_probability_maps(
+                probability_maps=member_probability_maps,
+                weights=[member.weight for member in members],
+                aggregation=args.aggregation,
+                member_threshold=args.member_threshold,
+            )
             mask = (ensemble_prob >= float(args.threshold)).astype(np.uint8)
             if postprocess_config.postprocess_enabled:
                 mask = postprocess_binary_mask(mask, postprocess_config)
@@ -286,6 +268,8 @@ def main() -> int:
             "output_dir": str(args.output_dir),
             "submission_path": str(args.submission_path),
             "num_images": len(stats_rows),
+            "aggregation": args.aggregation,
+            "member_threshold": float(args.member_threshold),
             "threshold": float(args.threshold),
             "tta_enabled": not args.no_tta,
             "postprocess_enabled": postprocess_config.postprocess_enabled,
@@ -299,6 +283,7 @@ def main() -> int:
                     "run_dir": str(member.run_dir),
                     "image_size": member.config.image_size,
                     "mask_loss": member.config.mask_loss,
+                    "tta_ops": member.config.tta_ops,
                     "tta_scales": member.config.tta_scales,
                 }
                 for member in members

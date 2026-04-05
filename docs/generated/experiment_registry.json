@@ -152,12 +152,71 @@
           "device": "mps",
           "tta_enabled": true,
           "threshold": 0.5
+        },
+        "latest_hypothesis_suite": {
+          "suite_tag": "night_20260404_223806",
+          "takeaway": "wide6 weighted_mean without TTA reached Dice 0.8684; the strongest short screen was screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8 with dice_tuned 0.8912",
+          "best_oof_overall": {
+            "ensemble": "wide6",
+            "aggregation": "weighted_mean",
+            "threshold": 0.55,
+            "dice": 0.8684194043723789,
+            "iou": 0.7945301031333779,
+            "n_samples": 2000,
+            "tta_enabled": false,
+            "tta_ops": null,
+            "tta_scales": null,
+            "member_threshold": 0.5,
+            "postprocess_enabled": true,
+            "postprocess_min_component_area": 128,
+            "postprocess_fill_holes": true,
+            "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_no_tta.json"
+          },
+          "best_oof_with_tta": {
+            "ensemble": "wide6",
+            "aggregation": "max_prob",
+            "threshold": 0.55,
+            "dice": 0.8668311325136824,
+            "iou": 0.792659169291871,
+            "n_samples": 2000,
+            "tta_enabled": true,
+            "tta_ops": "flips",
+            "tta_scales": [
+              0.75,
+              1.0,
+              1.25
+            ],
+            "member_threshold": 0.5,
+            "postprocess_enabled": true,
+            "postprocess_min_component_area": 128,
+            "postprocess_fill_holes": true,
+            "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_flips_multiscale.json"
+          },
+          "best_training_screen": {
+            "run_name": "screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8",
+            "fold": 1,
+            "image_size": 384,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "resize_interpolation": "linear",
+            "finetune_from_checkpoint": true,
+            "dice_tuned": 0.8912327114442993,
+            "dice": 0.8886892502282749,
+            "mIoU": 0.900741398642644,
+            "best_threshold": 0.6,
+            "tta": true,
+            "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8/final_tta_metrics.json"
+          }
         }
       },
       "artifacts": [
         "artifacts/runs/supervised_v4/oof_ensemble_eval.json",
         "artifacts/runs/supervised_v4/checkpoint_soup_fold1_eval.json",
-        "artifacts/runs/supervised_v4/submission_supervised_v4_wide6_thr50_summary.json"
+        "artifacts/runs/supervised_v4/submission_supervised_v4_wide6_thr50_summary.json",
+        "artifacts/public/supervised_v4_hypothesis_suite_latest.json",
+        "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/summary.txt",
+        "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_no_tta.json",
+        "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8/final_tta_metrics.json"
       ],
       "commands": {
         "smoke": "python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5",
@@ -226,15 +285,15 @@
             "tta": true
           },
           {
-            "run_name": "segformer_b2_fold1_320_heavy80_sched_ls005_ema",
+            "run_name": "screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8",
             "fold": 1,
-            "image_size": 320,
-            "aug": "heavy",
-            "mask_loss": "dice_focal",
-            "dice_tuned": 0.8910127251948242,
-            "dice": 0.8842276550267006,
-            "mIoU": 0.896713258972409,
-            "best_threshold": 0.75,
+            "image_size": 384,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "dice_tuned": 0.8912327114442993,
+            "dice": 0.8886892502282749,
+            "mIoU": 0.900741398642644,
+            "best_threshold": 0.6,
             "tta": true
           }
         ],
@@ -379,7 +438,8 @@
             "iou": 0.7890250747971217,
             "n_samples": 2000
           }
-        ]
+        ],
+        "latest_hypothesis_suite_path": "artifacts/public/supervised_v4_hypothesis_suite_latest.json"
       }
     },
     {

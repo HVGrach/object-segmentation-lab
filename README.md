@@ -13,6 +13,7 @@ The repository is intentionally GitHub-friendly:
 <!-- AUTO-GENERATED:BENCHMARK_SNAPSHOT_START -->
 - **Safest reproducible path**: `Advanced Baseline` with OOF Dice 0.8391. Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA.
 - **Strongest supervised signal**: `Supervised V4` with dice_tuned 0.8959. segformer_b2_fold1_384_finetune_from_moderate
+- **Latest aug sweep**: `Supervised V4` with OOF Dice 0.8684. wide6 weighted_mean without TTA; best short screen screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8 dice_tuned 0.8912.
 - **Best semi-supervised local result**: `SegFormer Boundary Semi-Supervised` with val_mIoU 0.9047. Iteration 0 improved over the supervised phase, iteration 1 regressed.
 - **Best proxy-research result**: `DINOv2 Research` with best_val_iou 0.7224. concat fusion on dinov2_s.
 
@@ -95,7 +96,10 @@ The public repository does not ship raw datasets or model weights.
 - [Experiment registry](docs/experiment_registry.md)
 - [Generated benchmark snapshot](docs/generated/benchmark_snapshot.json)
 - [Generated experiment registry JSON](docs/generated/experiment_registry.json)
+- [Latest supervised_v4 hypothesis suite summary](artifacts/public/supervised_v4_hypothesis_suite_latest.json)
 - [Russian deep dive](docs/project_deep_dive_ru.md)
+- [Deep research agenda (RU)](docs/research/DEEP_RESEARCH_AGENDA_RU.md)
+- [SOTA ideas bank (RU)](docs/research/SOTA_IDEAS_RU.md)
 - [Archive policy](docs/archive/README.md)
 
 ## Automation

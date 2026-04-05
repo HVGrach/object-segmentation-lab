@@ -1,0 +1,1373 @@
+{
+  "suite_tag": "night_20260404_223806",
+  "suite_dir": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806",
+  "summary_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/summary.txt",
+  "takeaway": "wide6 weighted_mean without TTA reached Dice 0.8684; the strongest short screen was screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8 with dice_tuned 0.8912",
+  "best_oof_overall": {
+    "ensemble": "wide6",
+    "aggregation": "weighted_mean",
+    "threshold": 0.55,
+    "dice": 0.8684194043723789,
+    "iou": 0.7945301031333779,
+    "n_samples": 2000,
+    "tta_enabled": false,
+    "tta_ops": null,
+    "tta_scales": null,
+    "member_threshold": 0.5,
+    "postprocess_enabled": true,
+    "postprocess_min_component_area": 128,
+    "postprocess_fill_holes": true,
+    "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_no_tta.json"
+  },
+  "best_oof_with_tta": {
+    "ensemble": "wide6",
+    "aggregation": "max_prob",
+    "threshold": 0.55,
+    "dice": 0.8668311325136824,
+    "iou": 0.792659169291871,
+    "n_samples": 2000,
+    "tta_enabled": true,
+    "tta_ops": "flips",
+    "tta_scales": [
+      0.75,
+      1.0,
+      1.25
+    ],
+    "member_threshold": 0.5,
+    "postprocess_enabled": true,
+    "postprocess_min_component_area": 128,
+    "postprocess_fill_holes": true,
+    "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_flips_multiscale.json"
+  },
+  "best_training_screen": {
+    "run_name": "screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8",
+    "fold": 1,
+    "image_size": 384,
+    "aug": "moderate",
+    "mask_loss": "lovasz_focal",
+    "resize_interpolation": "linear",
+    "finetune_from_checkpoint": true,
+    "dice_tuned": 0.8912327114442993,
+    "dice": 0.8886892502282749,
+    "mIoU": 0.900741398642644,
+    "best_threshold": 0.6,
+    "tta": true,
+    "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8/final_tta_metrics.json"
+  },
+  "published_artifacts": [
+    "artifacts/public/supervised_v4_hypothesis_suite_latest.json",
+    "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/summary.txt",
+    "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_no_tta.json",
+    "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8/final_tta_metrics.json"
+  ],
+  "oof_file_summaries": [
+    {
+      "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_d4_multiscale.json",
+      "settings": {
+        "presets": [
+          "lovasz3",
+          "blend4",
+          "wide6"
+        ],
+        "run_names": null,
+        "weights": null,
+        "aggregations": [
+          "weighted_mean",
+          "mean",
+          "hard_vote",
+          "max_prob"
+        ],
+        "thresholds": [
+          0.35,
+          0.4,
+          0.45,
+          0.5,
+          0.55,
+          0.6,
+          0.65
+        ],
+        "member_threshold": 0.5,
+        "limit": null,
+        "tta_enabled": true,
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "tta_ops": "d4",
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true
+      },
+      "best_result": {
+        "ensemble": "wide6",
+        "aggregation": "weighted_mean",
+        "threshold": 0.5,
+        "dice": 0.8653265614812642,
+        "iou": 0.7916869934194058,
+        "n_samples": 2000,
+        "tta_enabled": true,
+        "tta_ops": "d4",
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "member_threshold": 0.5,
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true,
+        "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_d4_multiscale.json"
+      },
+      "best_per_combo": [
+        {
+          "ensemble": "wide6",
+          "aggregation": "weighted_mean",
+          "threshold": 0.5,
+          "dice": 0.8653265614812642,
+          "iou": 0.7916869934194058,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "mean",
+          "threshold": 0.5,
+          "dice": 0.8653265614812642,
+          "iou": 0.7916869934194058,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "weighted_mean",
+          "threshold": 0.45,
+          "dice": 0.8650998184460513,
+          "iou": 0.7911310411437604,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "mean",
+          "threshold": 0.45,
+          "dice": 0.8650998184460513,
+          "iou": 0.7911310411437604,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "hard_vote",
+          "threshold": 0.55,
+          "dice": 0.8648477655069058,
+          "iou": 0.7923614377648757,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "max_prob",
+          "threshold": 0.55,
+          "dice": 0.8647131314210686,
+          "iou": 0.7907496565831353,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        }
+      ]
+    },
+    {
+      "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_d4_x1.json",
+      "settings": {
+        "presets": [
+          "lovasz3",
+          "blend4",
+          "wide6"
+        ],
+        "run_names": null,
+        "weights": null,
+        "aggregations": [
+          "weighted_mean",
+          "mean",
+          "hard_vote",
+          "max_prob"
+        ],
+        "thresholds": [
+          0.35,
+          0.4,
+          0.45,
+          0.5,
+          0.55,
+          0.6,
+          0.65
+        ],
+        "member_threshold": 0.5,
+        "limit": null,
+        "tta_enabled": true,
+        "tta_scales": [
+          1.0
+        ],
+        "tta_ops": "d4",
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true
+      },
+      "best_result": {
+        "ensemble": "wide6",
+        "aggregation": "weighted_mean",
+        "threshold": 0.55,
+        "dice": 0.8651547817821097,
+        "iou": 0.7913650172094423,
+        "n_samples": 2000,
+        "tta_enabled": true,
+        "tta_ops": "d4",
+        "tta_scales": [
+          1.0
+        ],
+        "member_threshold": 0.5,
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true,
+        "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_d4_x1.json"
+      },
+      "best_per_combo": [
+        {
+          "ensemble": "wide6",
+          "aggregation": "weighted_mean",
+          "threshold": 0.55,
+          "dice": 0.8651547817821097,
+          "iou": 0.7913650172094423,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "mean",
+          "threshold": 0.55,
+          "dice": 0.8651547817821097,
+          "iou": 0.7913650172094423,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "hard_vote",
+          "threshold": 0.55,
+          "dice": 0.8649970712964983,
+          "iou": 0.7917792351939056,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "hard_vote",
+          "threshold": 0.55,
+          "dice": 0.864326594036603,
+          "iou": 0.7909943366145776,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "weighted_mean",
+          "threshold": 0.5,
+          "dice": 0.8642862370354044,
+          "iou": 0.7904766228271685,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "mean",
+          "threshold": 0.5,
+          "dice": 0.8642862370354044,
+          "iou": 0.7904766228271685,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        }
+      ]
+    },
+    {
+      "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_flips_multiscale.json",
+      "settings": {
+        "presets": [
+          "lovasz3",
+          "blend4",
+          "wide6"
+        ],
+        "run_names": null,
+        "weights": null,
+        "aggregations": [
+          "weighted_mean",
+          "mean",
+          "hard_vote",
+          "max_prob"
+        ],
+        "thresholds": [
+          0.35,
+          0.4,
+          0.45,
+          0.5,
+          0.55,
+          0.6,
+          0.65
+        ],
+        "member_threshold": 0.5,
+        "limit": null,
+        "tta_enabled": true,
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "tta_ops": "flips",
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true
+      },
+      "best_result": {
+        "ensemble": "wide6",
+        "aggregation": "max_prob",
+        "threshold": 0.55,
+        "dice": 0.8668311325136824,
+        "iou": 0.792659169291871,
+        "n_samples": 2000,
+        "tta_enabled": true,
+        "tta_ops": "flips",
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "member_threshold": 0.5,
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true,
+        "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_flips_multiscale.json"
+      },
+      "best_per_combo": [
+        {
+          "ensemble": "wide6",
+          "aggregation": "max_prob",
+          "threshold": 0.55,
+          "dice": 0.8668311325136824,
+          "iou": 0.792659169291871,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "weighted_mean",
+          "threshold": 0.5,
+          "dice": 0.866759883242149,
+          "iou": 0.7930754936197527,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "mean",
+          "threshold": 0.5,
+          "dice": 0.866759883242149,
+          "iou": 0.7930754936197527,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "hard_vote",
+          "threshold": 0.35,
+          "dice": 0.8662849319324989,
+          "iou": 0.7914484892305439,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "hard_vote",
+          "threshold": 0.55,
+          "dice": 0.8662736724320782,
+          "iou": 0.7937473669868356,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "weighted_mean",
+          "threshold": 0.45,
+          "dice": 0.866187010992354,
+          "iou": 0.7921738526922328,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        }
+      ]
+    },
+    {
+      "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_flips_x1.json",
+      "settings": {
+        "presets": [
+          "lovasz3",
+          "blend4",
+          "wide6"
+        ],
+        "run_names": null,
+        "weights": null,
+        "aggregations": [
+          "weighted_mean",
+          "mean",
+          "hard_vote",
+          "max_prob"
+        ],
+        "thresholds": [
+          0.35,
+          0.4,
+          0.45,
+          0.5,
+          0.55,
+          0.6,
+          0.65
+        ],
+        "member_threshold": 0.5,
+        "limit": null,
+        "tta_enabled": true,
+        "tta_scales": [
+          1.0
+        ],
+        "tta_ops": "flips",
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true
+      },
+      "best_result": {
+        "ensemble": "wide6",
+        "aggregation": "weighted_mean",
+        "threshold": 0.55,
+        "dice": 0.8664002938363021,
+        "iou": 0.792667703732841,
+        "n_samples": 2000,
+        "tta_enabled": true,
+        "tta_ops": "flips",
+        "tta_scales": [
+          1.0
+        ],
+        "member_threshold": 0.5,
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true,
+        "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_flips_x1.json"
+      },
+      "best_per_combo": [
+        {
+          "ensemble": "wide6",
+          "aggregation": "weighted_mean",
+          "threshold": 0.55,
+          "dice": 0.8664002938363021,
+          "iou": 0.792667703732841,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "mean",
+          "threshold": 0.55,
+          "dice": 0.8664002938363021,
+          "iou": 0.792667703732841,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "max_prob",
+          "threshold": 0.6,
+          "dice": 0.8656864270370789,
+          "iou": 0.7909803844869664,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "hard_vote",
+          "threshold": 0.55,
+          "dice": 0.8654805964381831,
+          "iou": 0.7921063335596378,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "weighted_mean",
+          "threshold": 0.5,
+          "dice": 0.8649477586655592,
+          "iou": 0.7909625303652863,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "mean",
+          "threshold": 0.5,
+          "dice": 0.8649477586655592,
+          "iou": 0.7909625303652863,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "flips",
+          "tta_scales": [
+            1.0
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        }
+      ]
+    },
+    {
+      "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_no_tta.json",
+      "settings": {
+        "presets": [
+          "lovasz3",
+          "blend4",
+          "wide6"
+        ],
+        "run_names": null,
+        "weights": null,
+        "aggregations": [
+          "weighted_mean",
+          "mean",
+          "hard_vote",
+          "max_prob"
+        ],
+        "thresholds": [
+          0.35,
+          0.4,
+          0.45,
+          0.5,
+          0.55,
+          0.6,
+          0.65
+        ],
+        "member_threshold": 0.5,
+        "limit": null,
+        "tta_enabled": false,
+        "tta_scales": null,
+        "tta_ops": null,
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true
+      },
+      "best_result": {
+        "ensemble": "wide6",
+        "aggregation": "weighted_mean",
+        "threshold": 0.55,
+        "dice": 0.8684194043723789,
+        "iou": 0.7945301031333779,
+        "n_samples": 2000,
+        "tta_enabled": false,
+        "tta_ops": null,
+        "tta_scales": null,
+        "member_threshold": 0.5,
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true,
+        "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_no_tta.json"
+      },
+      "best_per_combo": [
+        {
+          "ensemble": "wide6",
+          "aggregation": "weighted_mean",
+          "threshold": 0.55,
+          "dice": 0.8684194043723789,
+          "iou": 0.7945301031333779,
+          "n_samples": 2000,
+          "tta_enabled": false,
+          "tta_ops": null,
+          "tta_scales": null,
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "mean",
+          "threshold": 0.55,
+          "dice": 0.8684194043723789,
+          "iou": 0.7945301031333779,
+          "n_samples": 2000,
+          "tta_enabled": false,
+          "tta_ops": null,
+          "tta_scales": null,
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "max_prob",
+          "threshold": 0.65,
+          "dice": 0.8672542701774391,
+          "iou": 0.7926906017110976,
+          "n_samples": 2000,
+          "tta_enabled": false,
+          "tta_ops": null,
+          "tta_scales": null,
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "hard_vote",
+          "threshold": 0.55,
+          "dice": 0.866554257314393,
+          "iou": 0.7928064354257515,
+          "n_samples": 2000,
+          "tta_enabled": false,
+          "tta_ops": null,
+          "tta_scales": null,
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "hard_vote",
+          "threshold": 0.55,
+          "dice": 0.8664259968038196,
+          "iou": 0.7927512575180212,
+          "n_samples": 2000,
+          "tta_enabled": false,
+          "tta_ops": null,
+          "tta_scales": null,
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "blend4",
+          "aggregation": "weighted_mean",
+          "threshold": 0.5,
+          "dice": 0.8664144022585997,
+          "iou": 0.7923885258661014,
+          "n_samples": 2000,
+          "tta_enabled": false,
+          "tta_ops": null,
+          "tta_scales": null,
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        }
+      ]
+    },
+    {
+      "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_wide6_no_post.json",
+      "settings": {
+        "presets": [
+          "wide6"
+        ],
+        "run_names": null,
+        "weights": null,
+        "aggregations": [
+          "weighted_mean",
+          "mean",
+          "hard_vote",
+          "max_prob"
+        ],
+        "thresholds": [
+          0.35,
+          0.4,
+          0.45,
+          0.5,
+          0.55,
+          0.6,
+          0.65
+        ],
+        "member_threshold": 0.5,
+        "limit": null,
+        "tta_enabled": true,
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "tta_ops": "d4",
+        "postprocess_enabled": false,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true
+      },
+      "best_result": {
+        "ensemble": "wide6",
+        "aggregation": "weighted_mean",
+        "threshold": 0.5,
+        "dice": 0.8652431858777124,
+        "iou": 0.7913834615865499,
+        "n_samples": 2000,
+        "tta_enabled": true,
+        "tta_ops": "d4",
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "member_threshold": 0.5,
+        "postprocess_enabled": false,
+        "postprocess_min_component_area": 128,
+        "postprocess_fill_holes": true,
+        "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_wide6_no_post.json"
+      },
+      "best_per_combo": [
+        {
+          "ensemble": "wide6",
+          "aggregation": "weighted_mean",
+          "threshold": 0.5,
+          "dice": 0.8652431858777124,
+          "iou": 0.7913834615865499,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": false,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "mean",
+          "threshold": 0.5,
+          "dice": 0.8652431858777124,
+          "iou": 0.7913834615865499,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": false,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "max_prob",
+          "threshold": 0.55,
+          "dice": 0.8645579298579816,
+          "iou": 0.7903507063951463,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": false,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "hard_vote",
+          "threshold": 0.35,
+          "dice": 0.8640548347916465,
+          "iou": 0.7892683532604347,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": false,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        }
+      ]
+    },
+    {
+      "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_wide6_post256.json",
+      "settings": {
+        "presets": [
+          "wide6"
+        ],
+        "run_names": null,
+        "weights": null,
+        "aggregations": [
+          "weighted_mean",
+          "mean",
+          "hard_vote",
+          "max_prob"
+        ],
+        "thresholds": [
+          0.35,
+          0.4,
+          0.45,
+          0.5,
+          0.55,
+          0.6,
+          0.65
+        ],
+        "member_threshold": 0.5,
+        "limit": null,
+        "tta_enabled": true,
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "tta_ops": "d4",
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 256,
+        "postprocess_fill_holes": true
+      },
+      "best_result": {
+        "ensemble": "wide6",
+        "aggregation": "weighted_mean",
+        "threshold": 0.5,
+        "dice": 0.8655057726224662,
+        "iou": 0.7921153345169937,
+        "n_samples": 2000,
+        "tta_enabled": true,
+        "tta_ops": "d4",
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "member_threshold": 0.5,
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 256,
+        "postprocess_fill_holes": true,
+        "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_wide6_post256.json"
+      },
+      "best_per_combo": [
+        {
+          "ensemble": "wide6",
+          "aggregation": "weighted_mean",
+          "threshold": 0.5,
+          "dice": 0.8655057726224662,
+          "iou": 0.7921153345169937,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 256,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "mean",
+          "threshold": 0.5,
+          "dice": 0.8655057726224662,
+          "iou": 0.7921153345169937,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 256,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "max_prob",
+          "threshold": 0.55,
+          "dice": 0.8649358524679175,
+          "iou": 0.7912422326755123,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 256,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "hard_vote",
+          "threshold": 0.35,
+          "dice": 0.864447732797684,
+          "iou": 0.7901720965215916,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 256,
+          "postprocess_fill_holes": true
+        }
+      ]
+    },
+    {
+      "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_wide6_post64.json",
+      "settings": {
+        "presets": [
+          "wide6"
+        ],
+        "run_names": null,
+        "weights": null,
+        "aggregations": [
+          "weighted_mean",
+          "mean",
+          "hard_vote",
+          "max_prob"
+        ],
+        "thresholds": [
+          0.35,
+          0.4,
+          0.45,
+          0.5,
+          0.55,
+          0.6,
+          0.65
+        ],
+        "member_threshold": 0.5,
+        "limit": null,
+        "tta_enabled": true,
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "tta_ops": "d4",
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 64,
+        "postprocess_fill_holes": true
+      },
+      "best_result": {
+        "ensemble": "wide6",
+        "aggregation": "weighted_mean",
+        "threshold": 0.5,
+        "dice": 0.8652632226105704,
+        "iou": 0.7915186699072843,
+        "n_samples": 2000,
+        "tta_enabled": true,
+        "tta_ops": "d4",
+        "tta_scales": [
+          0.75,
+          1.0,
+          1.25
+        ],
+        "member_threshold": 0.5,
+        "postprocess_enabled": true,
+        "postprocess_min_component_area": 64,
+        "postprocess_fill_holes": true,
+        "source_file": "artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_wide6_post64.json"
+      },
+      "best_per_combo": [
+        {
+          "ensemble": "wide6",
+          "aggregation": "weighted_mean",
+          "threshold": 0.5,
+          "dice": 0.8652632226105704,
+          "iou": 0.7915186699072843,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 64,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "mean",
+          "threshold": 0.5,
+          "dice": 0.8652632226105704,
+          "iou": 0.7915186699072843,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 64,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "max_prob",
+          "threshold": 0.55,
+          "dice": 0.8646212828284231,
+          "iou": 0.7905385800125173,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 64,
+          "postprocess_fill_holes": true
+        },
+        {
+          "ensemble": "wide6",
+          "aggregation": "hard_vote",
+          "threshold": 0.35,
+          "dice": 0.8642016226779443,
+          "iou": 0.7895240294270747,
+          "n_samples": 2000,
+          "tta_enabled": true,
+          "tta_ops": "d4",
+          "tta_scales": [
+            0.75,
+            1.0,
+            1.25
+          ],
+          "member_threshold": 0.5,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 64,
+          "postprocess_fill_holes": true
+        }
+      ]
+    }
+  ],
+  "training_screen_leaderboard": [
+    {
+      "run_name": "screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8",
+      "fold": 1,
+      "image_size": 384,
+      "aug": "moderate",
+      "mask_loss": "lovasz_focal",
+      "resize_interpolation": "linear",
+      "finetune_from_checkpoint": true,
+      "dice_tuned": 0.8912327114442993,
+      "dice": 0.8886892502282749,
+      "mIoU": 0.900741398642644,
+      "best_threshold": 0.6,
+      "tta": true,
+      "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8/final_tta_metrics.json"
+    },
+    {
+      "run_name": "screen_night_20260404_223806_fold1_448_ft_moderate_lovasz_ls003_e6",
+      "fold": 1,
+      "image_size": 448,
+      "aug": "moderate",
+      "mask_loss": "lovasz_focal",
+      "resize_interpolation": "linear",
+      "finetune_from_checkpoint": true,
+      "dice_tuned": 0.888645780113848,
+      "dice": 0.8840997912704404,
+      "mIoU": 0.8967634617428297,
+      "best_threshold": 0.6,
+      "tta": true,
+      "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_448_ft_moderate_lovasz_ls003_e6/final_tta_metrics.json"
+    },
+    {
+      "run_name": "screen_night_20260404_223806_fold1_320_heavy_lovasz_ls003_e20",
+      "fold": 1,
+      "image_size": 320,
+      "aug": "heavy",
+      "mask_loss": "lovasz_focal",
+      "resize_interpolation": "linear",
+      "finetune_from_checkpoint": false,
+      "dice_tuned": 0.8807142887679454,
+      "dice": 0.8755744452071379,
+      "mIoU": 0.8904815229534738,
+      "best_threshold": 0.6,
+      "tta": true,
+      "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_320_heavy_lovasz_ls003_e20/final_tta_metrics.json"
+    },
+    {
+      "run_name": "screen_night_20260404_223806_fold1_320_moderate_lovasz_ls003_cubic_e12",
+      "fold": 1,
+      "image_size": 320,
+      "aug": "moderate",
+      "mask_loss": "lovasz_focal",
+      "resize_interpolation": "cubic",
+      "finetune_from_checkpoint": false,
+      "dice_tuned": 0.8614755497016805,
+      "dice": 0.8565052257706208,
+      "mIoU": 0.8763382876609239,
+      "best_threshold": 0.55,
+      "tta": true,
+      "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_320_moderate_lovasz_ls003_cubic_e12/final_tta_metrics.json"
+    },
+    {
+      "run_name": "screen_night_20260404_223806_fold1_320_moderate_lovasz_ls003_area_e12",
+      "fold": 1,
+      "image_size": 320,
+      "aug": "moderate",
+      "mask_loss": "lovasz_focal",
+      "resize_interpolation": "area",
+      "finetune_from_checkpoint": false,
+      "dice_tuned": 0.857080770844258,
+      "dice": 0.8537208649370005,
+      "mIoU": 0.8744744663482937,
+      "best_threshold": 0.55,
+      "tta": true,
+      "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_320_moderate_lovasz_ls003_area_e12/final_tta_metrics.json"
+    },
+    {
+      "run_name": "screen_night_20260404_223806_fold1_320_geom_lovasz_ls003_e12",
+      "fold": 1,
+      "image_size": 320,
+      "aug": "geom",
+      "mask_loss": "lovasz_focal",
+      "resize_interpolation": "linear",
+      "finetune_from_checkpoint": false,
+      "dice_tuned": 0.8537697884005427,
+      "dice": 0.8472005595545657,
+      "mIoU": 0.8682703814668031,
+      "best_threshold": 0.55,
+      "tta": true,
+      "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_320_geom_lovasz_ls003_e12/final_tta_metrics.json"
+    }
+  ]
+}

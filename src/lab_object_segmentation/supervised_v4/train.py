@@ -61,6 +61,8 @@ warnings.filterwarnings("ignore")
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 MASK_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
+RESIZE_INTERPOLATION_CHOICES = ("nearest", "linear", "cubic", "area", "lanczos4")
+TTA_OP_CHOICES = ("flips", "d4")
 
 
 @dataclass
@@ -85,6 +87,7 @@ class TrainConfig:
     focal_gamma: float = 2.0
     focal_alpha_pos: float = 0.75
     mask_loss: str = "dice_focal"
+    resize_interpolation: str = "linear"
     ema_decay: float = 0.999
     save_every_n_epochs: int = 5
     eval_every_n_epochs: int = 2
@@ -102,6 +105,7 @@ class TrainConfig:
     copy_paste_scale_range: tuple[float, float] = (0.6, 1.4)
     boundary_kernel_size: int = 3
     tta_scales: list[float] = field(default_factory=lambda: [0.75, 1.0, 1.25])
+    tta_ops: str = "flips"
     postprocess_enabled: bool = True
     postprocess_min_component_area: int = 128
     postprocess_fill_holes: bool = True
@@ -125,9 +129,15 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--fold", type=int, default=1)
     parser.add_argument("--image-size", type=int, default=320)
     parser.add_argument("--epochs", type=int, required=True)
-    parser.add_argument("--aug", choices=["moderate", "heavy"], required=True)
+    parser.add_argument("--aug", choices=["geom", "moderate", "heavy"], required=True)
     parser.add_argument("--label-smoothing", type=float, required=True)
     parser.add_argument("--mask-loss", choices=["dice_focal", "lovasz_focal"], default="dice_focal")
+    parser.add_argument(
+        "--resize-interpolation",
+        choices=RESIZE_INTERPOLATION_CHOICES,
+        default="linear",
+        help="Interpolation for image resize in train/val transforms.",
+    )
     parser.add_argument("--physical-batch-size", type=int, default=8)
     parser.add_argument("--effective-batch-size", type=int, default=16)
     parser.add_argument("--seed", type=int, default=42)
@@ -136,6 +146,12 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--finetune-from", type=str, default="", help="Path to checkpoint .pth to load model+ema weights from (fresh optimizer/scheduler)")
     parser.add_argument("--finetune-lr-scale", type=float, default=0.3, help="Scale base_lr by this factor for fine-tuning (default 0.3 -> ~1.8e-5)")
     parser.add_argument("--tta-scales", type=float, nargs="+", default=[0.75, 1.0, 1.25], help="Multi-scale TTA scales for final evaluation")
+    parser.add_argument(
+        "--tta-ops",
+        choices=TTA_OP_CHOICES,
+        default="flips",
+        help="Test-time augmentation transform family: flips or D4-style rotations+flips.",
+    )
     parser.add_argument("--disable-postprocess", action="store_true", help="Disable mask post-processing during evaluation")
     parser.add_argument("--postprocess-min-component-area", type=int, default=128, help="Remove connected components smaller than this area")
     parser.add_argument("--disable-postprocess-fill-holes", action="store_true", help="Disable filling holes inside predicted masks")
@@ -158,11 +174,13 @@ def parse_args() -> TrainConfig:
         aug=args.aug,
         label_smoothing=args.label_smoothing,
         mask_loss=args.mask_loss,
+        resize_interpolation=args.resize_interpolation,
         physical_batch_size=args.physical_batch_size,
         effective_batch_size=args.effective_batch_size,
         seed=args.seed,
         eval_every_n_epochs=args.eval_every_n_epochs,
         tta_scales=[float(scale) for scale in args.tta_scales],
+        tta_ops=args.tta_ops,
         postprocess_enabled=not args.disable_postprocess,
         postprocess_min_component_area=args.postprocess_min_component_area,
         postprocess_fill_holes=not args.disable_postprocess_fill_holes,
@@ -319,7 +337,36 @@ def generate_boundary_mask(binary_mask: np.ndarray, kernel_size: int = 3) -> np.
     return (dilated - eroded > 0).astype(np.float32)
 
 
-def build_moderate_transform(image_size: int, mean: list[float], std: list[float]) -> A.Compose:
+def resolve_resize_interpolation(name: str) -> int:
+    interpolation_map = {
+        "nearest": cv2.INTER_NEAREST,
+        "linear": cv2.INTER_LINEAR,
+        "cubic": cv2.INTER_CUBIC,
+        "area": cv2.INTER_AREA,
+        "lanczos4": cv2.INTER_LANCZOS4,
+    }
+    try:
+        return interpolation_map[name]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported resize interpolation: {name}") from exc
+
+
+def build_geom_transform(image_size: int, mean: list[float], std: list[float], resize_interpolation: str) -> A.Compose:
+    image_resize_interpolation = resolve_resize_interpolation(resize_interpolation)
+    return A.Compose(
+        [
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.25),
+            A.RandomRotate90(p=0.5),
+            A.Resize(image_size, image_size, interpolation=image_resize_interpolation, mask_interpolation=cv2.INTER_NEAREST),
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2(),
+        ]
+    )
+
+
+def build_moderate_transform(image_size: int, mean: list[float], std: list[float], resize_interpolation: str) -> A.Compose:
+    image_resize_interpolation = resolve_resize_interpolation(resize_interpolation)
     return A.Compose(
         [
             A.HorizontalFlip(p=0.5),
@@ -346,14 +393,15 @@ def build_moderate_transform(image_size: int, mean: list[float], std: list[float
                 fill_mask=0,
                 p=0.15,
             ),
-            A.Resize(image_size, image_size, interpolation=cv2.INTER_LINEAR, mask_interpolation=cv2.INTER_NEAREST),
+            A.Resize(image_size, image_size, interpolation=image_resize_interpolation, mask_interpolation=cv2.INTER_NEAREST),
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ]
     )
 
 
-def build_heavy_transform(image_size: int, mean: list[float], std: list[float]) -> A.Compose:
+def build_heavy_transform(image_size: int, mean: list[float], std: list[float], resize_interpolation: str) -> A.Compose:
+    image_resize_interpolation = resolve_resize_interpolation(resize_interpolation)
     return A.Compose(
         [
             A.HorizontalFlip(p=0.5),
@@ -421,17 +469,18 @@ def build_heavy_transform(image_size: int, mean: list[float], std: list[float]) 
                 fill_mask=0,
                 p=0.30,
             ),
-            A.Resize(image_size, image_size, interpolation=cv2.INTER_LINEAR, mask_interpolation=cv2.INTER_NEAREST),
+            A.Resize(image_size, image_size, interpolation=image_resize_interpolation, mask_interpolation=cv2.INTER_NEAREST),
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ]
     )
 
 
-def build_val_transform(image_size: int, mean: list[float], std: list[float]) -> A.Compose:
+def build_val_transform(image_size: int, mean: list[float], std: list[float], resize_interpolation: str = "linear") -> A.Compose:
+    image_resize_interpolation = resolve_resize_interpolation(resize_interpolation)
     return A.Compose(
         [
-            A.Resize(image_size, image_size, interpolation=cv2.INTER_LINEAR, mask_interpolation=cv2.INTER_NEAREST),
+            A.Resize(image_size, image_size, interpolation=image_resize_interpolation, mask_interpolation=cv2.INTER_NEAREST),
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ]
@@ -443,6 +492,7 @@ class TrainSegmentationDataset(Dataset):
         self,
         samples: list[tuple[Path, Path]],
         image_size: int,
+        geom_transform: A.Compose,
         moderate_transform: A.Compose,
         heavy_transform: A.Compose,
         aug_mode: str,
@@ -453,6 +503,7 @@ class TrainSegmentationDataset(Dataset):
     ):
         self.samples = samples
         self.image_size = image_size
+        self.geom_transform = geom_transform
         self.moderate_transform = moderate_transform
         self.heavy_transform = heavy_transform
         self.aug_mode = aug_mode
@@ -460,7 +511,12 @@ class TrainSegmentationDataset(Dataset):
         self.copy_paste_two_objects_p = copy_paste_two_objects_p
         self.copy_paste_scale_range = copy_paste_scale_range
         self.boundary_kernel_size = boundary_kernel_size
-        self.phase = "moderate"
+        self.phase = "geom" if aug_mode == "geom" else "moderate"
+        self.transforms_by_phase = {
+            "geom": self.geom_transform,
+            "moderate": self.moderate_transform,
+            "heavy": self.heavy_transform,
+        }
 
         self.camera_to_indices: dict[str, list[int]] = {}
         for idx, (image_path, _) in enumerate(samples):
@@ -471,7 +527,7 @@ class TrainSegmentationDataset(Dataset):
         return len(self.samples)
 
     def set_phase(self, phase: str) -> None:
-        if phase not in {"moderate", "heavy"}:
+        if phase not in self.transforms_by_phase:
             raise ValueError(f"Unsupported phase: {phase}")
         self.phase = phase
 
@@ -574,7 +630,7 @@ class TrainSegmentationDataset(Dataset):
         image, mask, host_camera = self._load_raw_sample(idx)
         image, mask = self._maybe_copy_paste(image, mask, host_camera)
 
-        transform = self.heavy_transform if self.phase == "heavy" else self.moderate_transform
+        transform = self.transforms_by_phase[self.phase]
         transformed = transform(image=image, mask=mask)
 
         image_t = transformed["image"].float()
@@ -909,6 +965,61 @@ def hvflip(x: torch.Tensor) -> torch.Tensor:
     return torch.flip(x, dims=(-2, -1))
 
 
+def rot90(x: torch.Tensor) -> torch.Tensor:
+    return torch.rot90(x, 1, dims=(-2, -1))
+
+
+def rot270(x: torch.Tensor) -> torch.Tensor:
+    return torch.rot90(x, 3, dims=(-2, -1))
+
+
+def get_tta_sequences(tta_ops: str) -> list[tuple[str, ...]]:
+    if tta_ops == "flips":
+        return [(), ("hflip",), ("vflip",), ("hflip", "vflip")]
+    if tta_ops == "d4":
+        return [
+            (),
+            ("hflip",),
+            ("vflip",),
+            ("hflip", "vflip"),
+            ("rot90",),
+            ("rot270",),
+            ("rot90", "hflip"),
+            ("rot90", "vflip"),
+        ]
+    raise ValueError(f"Unsupported TTA transform family: {tta_ops}")
+
+
+def apply_tta_sequence(x: torch.Tensor, ops: tuple[str, ...]) -> torch.Tensor:
+    for op in ops:
+        if op == "hflip":
+            x = hflip(x)
+        elif op == "vflip":
+            x = vflip(x)
+        elif op == "rot90":
+            x = rot90(x)
+        elif op == "rot270":
+            x = rot270(x)
+        else:
+            raise ValueError(f"Unsupported TTA operation: {op}")
+    return x
+
+
+def invert_tta_sequence(x: torch.Tensor, ops: tuple[str, ...]) -> torch.Tensor:
+    for op in reversed(ops):
+        if op == "hflip":
+            x = hflip(x)
+        elif op == "vflip":
+            x = vflip(x)
+        elif op == "rot90":
+            x = rot270(x)
+        elif op == "rot270":
+            x = rot90(x)
+        else:
+            raise ValueError(f"Unsupported TTA operation: {op}")
+    return x
+
+
 def resize_for_tta(images: torch.Tensor, scale: float) -> torch.Tensor:
     if math.isclose(scale, 1.0, rel_tol=1e-6, abs_tol=1e-6):
         return images
@@ -981,16 +1092,12 @@ def predict_with_tta(model: nn.Module, images: torch.Tensor, target_size: tuple[
     preds = []
     for scale in config.tta_scales:
         scaled_images = resize_for_tta(images, float(scale))
-        for flip_fn, unflip_fn in [
-            (identity, identity),
-            (hflip, hflip),
-            (vflip, vflip),
-            (hvflip, hvflip),
-        ]:
-            seg_logits, _ = model(flip_fn(scaled_images))
+        for ops in get_tta_sequences(config.tta_ops):
+            aug_images = apply_tta_sequence(scaled_images, ops)
+            seg_logits, _ = model(aug_images)
             seg_logits = upsample_logits(seg_logits, target_size)
             probs = torch.sigmoid(seg_logits)
-            preds.append(unflip_fn(probs))
+            preds.append(invert_tta_sequence(probs, ops))
     return torch.stack(preds, dim=0).mean(dim=0)
 
 
@@ -1064,6 +1171,8 @@ def evaluate(model: nn.Module, dataloader: DataLoader, device: torch.device, con
 
 
 def get_epoch_phase(config: TrainConfig, epoch_idx: int) -> str:
+    if config.aug == "geom":
+        return "geom"
     if config.aug == "moderate":
         return "moderate"
     # Schedule: first 12.5% moderate warmup, middle 62.5% heavy, final 25% moderate cooldown
@@ -1230,13 +1339,15 @@ def train_one_epoch(
 
 
 def build_dataloaders(train_samples: list[tuple[Path, Path]], val_samples: list[tuple[Path, Path]], config: TrainConfig, device: torch.device) -> tuple[TrainSegmentationDataset, DataLoader, DataLoader]:
-    moderate_transform = build_moderate_transform(config.image_size, config.image_mean, config.image_std)
-    heavy_transform = build_heavy_transform(config.image_size, config.image_mean, config.image_std)
-    val_transform = build_val_transform(config.image_size, config.image_mean, config.image_std)
+    geom_transform = build_geom_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
+    moderate_transform = build_moderate_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
+    heavy_transform = build_heavy_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
+    val_transform = build_val_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
 
     train_dataset = TrainSegmentationDataset(
         samples=train_samples,
         image_size=config.image_size,
+        geom_transform=geom_transform,
         moderate_transform=moderate_transform,
         heavy_transform=heavy_transform,
         aug_mode=config.aug,
@@ -1361,7 +1472,8 @@ def train(config: TrainConfig) -> int:
         f"[main] aug={config.aug} | image_size={config.image_size} | epochs={config.epochs} | "
         f"physical_bs={config.physical_batch_size} | effective_bs={config.effective_batch_size} | "
         f"accumulation={config.accumulation_steps} | mask_loss={config.mask_loss} | "
-        f"postprocess={'on' if config.postprocess_enabled else 'off'} | tta_scales={config.tta_scales}"
+        f"resize_interp={config.resize_interpolation} | postprocess={'on' if config.postprocess_enabled else 'off'} | "
+        f"tta_ops={config.tta_ops} | tta_scales={config.tta_scales}"
     )
 
     for epoch_idx in range(start_epoch, config.epochs):

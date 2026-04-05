@@ -15,6 +15,13 @@
       "note": "segformer_b2_fold1_384_finetune_from_moderate"
     },
     {
+      "label": "Latest aug sweep",
+      "track_id": "supervised_v4",
+      "track_title": "Supervised V4",
+      "metric": "OOF Dice 0.8684",
+      "note": "wide6 weighted_mean without TTA; best short screen screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8 dice_tuned 0.8912."
+    },
+    {
       "label": "Best semi-supervised local result",
       "track_id": "segformer_boundary_semisup_macos",
       "track_title": "SegFormer Boundary Semi-Supervised",
