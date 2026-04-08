@@ -12,7 +12,8 @@ The repository is intentionally GitHub-friendly:
 
 <!-- AUTO-GENERATED:BENCHMARK_SNAPSHOT_START -->
 - **Safest reproducible path**: `Advanced Baseline` with OOF Dice 0.8391. Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA.
-- **Strongest supervised signal**: `Supervised V4` with dice_tuned 0.8959. segformer_b2_fold1_384_finetune_from_moderate
+- **Current Kaggle baseline**: `Supervised V4` with Public 0.91242. segformer_b2_fold1_320_manual_v1_plus_teacher075
+- **Best supervised-only local signal**: `Supervised V4` with dice_tuned 0.8959. segformer_b2_fold1_384_finetune_from_moderate
 - **Latest aug sweep**: `Supervised V4` with OOF Dice 0.8684. wide6 weighted_mean without TTA; best short screen screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8 dice_tuned 0.8912.
 - **Best semi-supervised local result**: `SegFormer Boundary Semi-Supervised` with val_mIoU 0.9047. Iteration 0 improved over the supervised phase, iteration 1 regressed.
 - **Best proxy-research result**: `DINOv2 Research` with best_val_iou 0.7224. concat fusion on dinov2_s.
@@ -20,7 +21,7 @@ The repository is intentionally GitHub-friendly:
 | Track | Status | Headline metric | Quick entrypoint |
 | --- | --- | --- | --- |
 | Advanced Baseline | working | OOF Dice 0.8391 | `python scripts/run_lab3_ensemble_submission.py --limit 5` |
-| Supervised V4 | working | dice_tuned 0.8959 | `python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5` |
+| Supervised V4 | working | Public 0.91242 | `python scripts/predict_supervised_v4_ensemble.py --run-names segformer_b2_fold1_320_manual_v1_plus_teacher075 --weights 1.0 --aggregation weighted_mean --threshold 0.45 --limit 5` |
 | SegFormer Boundary Semi-Supervised | research | val_mIoU 0.9047 | `python scripts/run_segformer_semisup_smoke_test.py` |
 | DINOv2 Research | research | best_val_iou 0.7224 | `python scripts/run_dinov2_smoke_test.py --overwrite-cache` |
 <!-- AUTO-GENERATED:BENCHMARK_SNAPSHOT_END -->
@@ -41,7 +42,18 @@ The safest path to reproduce an existing result is the classic `advanced_baselin
 python scripts/run_lab3_ensemble_submission.py --limit 5
 ```
 
-The strongest supervised-only path is `supervised_v4`:
+The current Kaggle-backed `supervised_v4` baseline is:
+
+```bash
+python scripts/predict_supervised_v4_ensemble.py \
+  --run-names segformer_b2_fold1_320_manual_v1_plus_teacher075 \
+  --weights 1.0 \
+  --aggregation weighted_mean \
+  --threshold 0.45 \
+  --limit 5
+```
+
+For a supervised-only smoke path without the mixed-data recipe:
 
 ```bash
 python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5
@@ -96,6 +108,8 @@ The public repository does not ship raw datasets or model weights.
 - [Experiment registry](docs/experiment_registry.md)
 - [Generated benchmark snapshot](docs/generated/benchmark_snapshot.json)
 - [Generated experiment registry JSON](docs/generated/experiment_registry.json)
+- [Current supervised_v4 baseline summary](artifacts/public/supervised_v4_manual_teacher075_baseline.md)
+- [Current supervised_v4 baseline metadata](artifacts/public/supervised_v4_manual_teacher075_baseline.json)
 - [Latest supervised_v4 hypothesis suite summary](artifacts/public/supervised_v4_hypothesis_suite_latest.json)
 - [Russian deep dive](docs/project_deep_dive_ru.md)
 - [Deep research agenda (RU)](docs/research/DEEP_RESEARCH_AGENDA_RU.md)

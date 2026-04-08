@@ -48,7 +48,7 @@ This document is generated from the publish-safe metadata in `artifacts/public/`
 
 - Status: `working`
 - Category: `supervised`
-- Summary: Strongest supervised-only track built around SegFormer-B2 and a custom V4 decoder.
+- Summary: Current strongest practical SegFormer-B2/V4 baseline with clean manual labels and lower-weight teacher-approved pseudo-labels.
 
 ### Key Results
 
@@ -145,14 +145,28 @@ This document is generated from the publish-safe metadata in `artifacts/public/`
       "tta": true,
       "source_metrics_file": "artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8/final_tta_metrics.json"
     }
+  },
+  "current_kaggle_baseline": {
+    "run_name": "segformer_b2_fold1_320_manual_v1_plus_teacher075",
+    "summary": "segformer_b2_fold1_320_manual_v1_plus_teacher075 became the current Kaggle-backed baseline after mixing base lab3 train, imported manual labels, and teacher-approved pseudo-labels with weight 0.75.",
+    "kaggle_public_lb": 0.91242,
+    "threshold": 0.45,
+    "aggregation": "weighted_mean",
+    "tta_enabled": true,
+    "fold1_dice_tuned": 0.9199229259300161,
+    "fold1_mIoU": 0.9257426211571912,
+    "manual_holdout_dice_tuned": 0.9758237623320052,
+    "manual_holdout_mIoU": 0.9650304318958995
   }
 }
 ```
 
 ### Commands
 
-- `smoke`: `python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5`
+- `smoke`: `python scripts/predict_supervised_v4_ensemble.py --run-names segformer_b2_fold1_320_manual_v1_plus_teacher075 --weights 1.0 --aggregation weighted_mean --threshold 0.45 --limit 5`
 - `train_help`: `python scripts/train_supervised_v4.py --help`
+- `current_baseline_inference`: `python scripts/predict_supervised_v4_ensemble.py --run-names segformer_b2_fold1_320_manual_v1_plus_teacher075 --weights 1.0 --aggregation weighted_mean --threshold 0.45`
+- `current_baseline_train`: `python scripts/train_supervised_v4.py --run-name segformer_b2_fold1_320_manual_v1_plus_teacher075 --fold 1 --image-size 320 --epochs 35 --aug moderate --label-smoothing 0.03 --mask-loss lovasz_focal --physical-batch-size 8 --extra-labeled-root data/derived/imported_coco/manual_products_segmentation_v1 --extra-labeled-root artifacts/runs/unimatch_v2_wide6/night_20260405_unimatchv2_wide6_tta_sahi/accepted_teacher_predictions --extra-labeled-weight 1.0 --extra-labeled-weight 0.75 --extra-labeled-holdout-ratio 0.15 --extra-labeled-holdout-ratio 0.0`
 
 ### Source Artifacts
 
@@ -163,6 +177,13 @@ This document is generated from the publish-safe metadata in `artifacts/public/`
 - `artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/summary.txt`
 - `artifacts/runs/supervised_v4/hypothesis_suite/night_20260404_223806/oof_search_no_tta.json`
 - `artifacts/runs/supervised_v4/screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8/final_tta_metrics.json`
+- `artifacts/public/supervised_v4_manual_teacher075_baseline.json`
+- `artifacts/public/supervised_v4_manual_teacher075_baseline.md`
+
+### Warnings
+
+- Local fold1 validation is optimistic for clean CV comparison because the teacher-approved pseudo-labels were accepted by a wide6 teacher spanning other folds.
+- The public leaderboard score is an external checkpoint, but it should still be cross-checked against future private-leaderboard-safe variants.
 
 ## SegFormer Boundary Semi-Supervised
 

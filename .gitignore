@@ -33,6 +33,7 @@ __pycache__/
 
 # Data and heavyweight artifacts
 data/raw/
+data/derived/imported_coco/
 dl-lab-1-image-classification
 dl-lab-3-product-segmentation
 seg_runs/
