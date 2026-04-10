@@ -43,6 +43,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
+from sklearn.model_selection import GroupKFold
 from sklearn.metrics import f1_score
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
@@ -63,12 +64,24 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 MASK_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
 RESIZE_INTERPOLATION_CHOICES = ("nearest", "linear", "cubic", "area", "lanczos4")
 TTA_OP_CHOICES = ("flips", "d4")
+DEPTH_SPATIAL_REPLAY_TRANSFORMS = {
+    "HorizontalFlip",
+    "VerticalFlip",
+    "RandomRotate90",
+    "Affine",
+    "GridDistortion",
+    "ElasticTransform",
+    "Perspective",
+    "CoarseDropout",
+    "Resize",
+}
 
 
 @dataclass
 class TrainConfig:
     run_name: str
     fold: int
+    n_splits: int
     image_size: int
     epochs: int
     aug: str
@@ -118,6 +131,10 @@ class TrainConfig:
     extra_labeled_holdout_ratios: list[float] = field(default_factory=list)
     extra_holdout_ratio: float = 0.0
     extra_holdout_seed: int = 42
+    depth_root: str = ""
+    depth_mean: float = 0.5
+    depth_std: float = 0.25
+    depth_fill_value: float = 0.5
 
     @property
     def accumulation_steps(self) -> int:
@@ -126,6 +143,14 @@ class TrainConfig:
     @property
     def run_dir(self) -> Path:
         return RUNS_ROOT / "supervised_v4" / self.run_name
+
+    @property
+    def depth_enabled(self) -> bool:
+        return bool(self.depth_root)
+
+    @property
+    def input_channels(self) -> int:
+        return 4 if self.depth_enabled else 3
 
 
 @dataclass(frozen=True)
@@ -140,10 +165,13 @@ def parse_args() -> TrainConfig:
     parser = argparse.ArgumentParser(description="Train SegFormer-B2 supervised V4 pipeline.")
     parser.add_argument("--run-name", type=str, required=True)
     parser.add_argument("--fold", type=int, default=1)
+    parser.add_argument("--n-splits", type=int, default=3, help="Number of grouped camera folds used for train/val split.")
     parser.add_argument("--image-size", type=int, default=320)
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--aug", choices=["geom", "moderate", "heavy"], required=True)
     parser.add_argument("--label-smoothing", type=float, required=True)
+    parser.add_argument("--backbone", type=str, default="nvidia/mit-b2",
+                        help="HuggingFace SegFormer backbone: nvidia/mit-b0 .. nvidia/mit-b5")
     parser.add_argument("--mask-loss", choices=["dice_focal", "lovasz_focal"], default="dice_focal")
     parser.add_argument(
         "--resize-interpolation",
@@ -200,10 +228,21 @@ def parse_args() -> TrainConfig:
         default=42,
         help="Seed for extra labeled holdout splitting.",
     )
+    parser.add_argument("--depth-root", type=str, default="", help="Optional root with depth .npz files keyed by image stem.")
+    parser.add_argument("--depth-mean", type=float, default=0.5, help="Depth normalization mean applied after spatial transforms.")
+    parser.add_argument("--depth-std", type=float, default=0.25, help="Depth normalization std applied after spatial transforms.")
+    parser.add_argument(
+        "--depth-fill-value",
+        type=float,
+        default=0.5,
+        help="Raw depth value used when a sample has no matching depth file.",
+    )
     args = parser.parse_args()
 
-    if args.fold not in {0, 1, 2}:
-        raise ValueError(f"Unsupported fold index: {args.fold}")
+    if args.n_splits < 2:
+        raise ValueError("n-splits must be >= 2.")
+    if args.fold < 0 or args.fold >= args.n_splits:
+        raise ValueError(f"Unsupported fold index {args.fold} for n-splits={args.n_splits}.")
     if args.physical_batch_size <= 0:
         raise ValueError("physical-batch-size must be positive.")
     if args.effective_batch_size < args.physical_batch_size:
@@ -216,14 +255,18 @@ def parse_args() -> TrainConfig:
         raise ValueError("extra-labeled-weight values must be positive.")
     if any(not 0.0 <= ratio < 1.0 for ratio in args.extra_labeled_holdout_ratio):
         raise ValueError("extra-labeled-holdout-ratio values must be in [0, 1).")
+    if args.depth_std <= 0:
+        raise ValueError("depth-std must be positive.")
 
     return TrainConfig(
         run_name=args.run_name,
         fold=args.fold,
+        n_splits=args.n_splits,
         image_size=args.image_size,
         epochs=args.epochs,
         aug=args.aug,
         label_smoothing=args.label_smoothing,
+        backbone=args.backbone,
         mask_loss=args.mask_loss,
         resize_interpolation=args.resize_interpolation,
         physical_batch_size=args.physical_batch_size,
@@ -243,6 +286,10 @@ def parse_args() -> TrainConfig:
         extra_labeled_holdout_ratios=[float(ratio) for ratio in args.extra_labeled_holdout_ratio],
         extra_holdout_ratio=args.extra_holdout_ratio,
         extra_holdout_seed=args.extra_holdout_seed,
+        depth_root=str(Path(args.depth_root).expanduser().resolve()) if args.depth_root else "",
+        depth_mean=float(args.depth_mean),
+        depth_std=float(args.depth_std),
+        depth_fill_value=float(args.depth_fill_value),
     )
 
 
@@ -426,6 +473,30 @@ def collect_dataset_root_pairs(dataset_root: Path, *, sample_weight: float) -> l
     )
 
 
+def iter_depth_stem_candidates(image_path: Path) -> list[str]:
+    candidates = [image_path.stem]
+    stem_parts = image_path.stem.split("__")
+    if len(stem_parts) >= 2:
+        candidates.append(stem_parts[-1])
+    return list(dict.fromkeys(candidates))
+
+
+def resolve_depth_path(image_path: Path, depth_root: Path) -> tuple[Path | None, str]:
+    for idx, stem in enumerate(iter_depth_stem_candidates(image_path)):
+        depth_path = depth_root / f"{stem}.npz"
+        if depth_path.exists():
+            return depth_path, "direct" if idx == 0 else "heuristic"
+    return None, "missing"
+
+
+def summarize_depth_coverage(samples: list[SegmentationSample], depth_root: Path) -> dict[str, int]:
+    summary = {"total": len(samples), "direct": 0, "heuristic": 0, "missing": 0}
+    for sample in samples:
+        _, match_kind = resolve_depth_path(sample.image_path, depth_root)
+        summary[match_kind] += 1
+    return summary
+
+
 def split_samples_random(
     samples: list[SegmentationSample],
     val_ratio: float,
@@ -449,33 +520,27 @@ def split_samples_random(
     return train_samples, val_samples
 
 
-def load_val_sample_ids(project_root: Path, fold: int) -> set[str]:
-    candidate_paths = sorted((RUNS_ROOT / "advanced_baseline" / "runs").glob(f"*/fold_{fold}/val_sample_ids.json"))
-    if candidate_paths:
-        payload = json.loads(candidate_paths[0].read_text(encoding="utf-8"))
-        sample_ids = payload["sample_ids"] if isinstance(payload, dict) else payload
-        return set(sample_ids)
-
-    folds_summary_path = RUNS_ROOT / "advanced_baseline" / "folds_summary.json"
-    if not folds_summary_path.exists():
-        raise FileNotFoundError("Could not find val_sample_ids.json or folds_summary.json for fold split.")
-
-    folds_summary = json.loads(folds_summary_path.read_text(encoding="utf-8"))
-    fold_payload = folds_summary["folds"][fold]
-    val_preview = fold_payload.get("val_groups_preview", [])
-    val_count = int(fold_payload.get("val_group_count", len(val_preview)))
-    if len(val_preview) == val_count and val_preview:
-        all_samples = collect_labeled_pairs(
-            LAB3_DATASET_ROOT / "train" / "images",
-            LAB3_DATASET_ROOT / "train" / "masks",
+def load_val_sample_ids(project_root: Path, fold: int, *, n_splits: int = 3) -> set[str]:
+    del project_root
+    all_samples = collect_labeled_pairs(
+        LAB3_DATASET_ROOT / "train" / "images",
+        LAB3_DATASET_ROOT / "train" / "masks",
+        source_name="lab3_train",
+        sample_weight=1.0,
+    )
+    groups = [infer_camera_group(sample.image_path) for sample in all_samples]
+    unique_groups = sorted(set(groups))
+    if len(unique_groups) < n_splits:
+        raise RuntimeError(
+            f"Requested n_splits={n_splits}, but only {len(unique_groups)} unique camera groups are available."
         )
-        return {
-            sample.image_path.name
-            for sample in all_samples
-            if infer_camera_group(sample.image_path) in set(val_preview)
-        }
 
-    raise RuntimeError("Could not recover a complete grouped split for the requested fold.")
+    splitter = GroupKFold(n_splits=n_splits)
+    splits = list(splitter.split(np.arange(len(all_samples)), groups=groups))
+    if fold < 0 or fold >= len(splits):
+        raise ValueError(f"fold={fold} out of range for n_splits={n_splits}.")
+    _, val_idx = splits[fold]
+    return {all_samples[idx].image_path.name for idx in val_idx}
 
 
 def split_samples_by_fold(
@@ -511,9 +576,17 @@ def resolve_resize_interpolation(name: str) -> int:
         raise ValueError(f"Unsupported resize interpolation: {name}") from exc
 
 
-def build_geom_transform(image_size: int, mean: list[float], std: list[float], resize_interpolation: str) -> A.Compose:
+def build_geom_transform(
+    image_size: int,
+    mean: list[float],
+    std: list[float],
+    resize_interpolation: str,
+    *,
+    replay: bool = False,
+) -> A.Compose:
     image_resize_interpolation = resolve_resize_interpolation(resize_interpolation)
-    return A.Compose(
+    compose_cls = A.ReplayCompose if replay else A.Compose
+    return compose_cls(
         [
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.25),
@@ -525,9 +598,17 @@ def build_geom_transform(image_size: int, mean: list[float], std: list[float], r
     )
 
 
-def build_moderate_transform(image_size: int, mean: list[float], std: list[float], resize_interpolation: str) -> A.Compose:
+def build_moderate_transform(
+    image_size: int,
+    mean: list[float],
+    std: list[float],
+    resize_interpolation: str,
+    *,
+    replay: bool = False,
+) -> A.Compose:
     image_resize_interpolation = resolve_resize_interpolation(resize_interpolation)
-    return A.Compose(
+    compose_cls = A.ReplayCompose if replay else A.Compose
+    return compose_cls(
         [
             A.HorizontalFlip(p=0.5),
             A.RandomRotate90(p=0.25),
@@ -560,9 +641,17 @@ def build_moderate_transform(image_size: int, mean: list[float], std: list[float
     )
 
 
-def build_heavy_transform(image_size: int, mean: list[float], std: list[float], resize_interpolation: str) -> A.Compose:
+def build_heavy_transform(
+    image_size: int,
+    mean: list[float],
+    std: list[float],
+    resize_interpolation: str,
+    *,
+    replay: bool = False,
+) -> A.Compose:
     image_resize_interpolation = resolve_resize_interpolation(resize_interpolation)
-    return A.Compose(
+    compose_cls = A.ReplayCompose if replay else A.Compose
+    return compose_cls(
         [
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.3),
@@ -636,15 +725,65 @@ def build_heavy_transform(image_size: int, mean: list[float], std: list[float], 
     )
 
 
-def build_val_transform(image_size: int, mean: list[float], std: list[float], resize_interpolation: str = "linear") -> A.Compose:
+def build_val_transform(
+    image_size: int,
+    mean: list[float],
+    std: list[float],
+    resize_interpolation: str = "linear",
+    *,
+    replay: bool = False,
+) -> A.Compose:
     image_resize_interpolation = resolve_resize_interpolation(resize_interpolation)
-    return A.Compose(
+    compose_cls = A.ReplayCompose if replay else A.Compose
+    return compose_cls(
         [
             A.Resize(image_size, image_size, interpolation=image_resize_interpolation, mask_interpolation=cv2.INTER_NEAREST),
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ]
     )
+
+
+def filter_replay_for_depth(replay: dict | None) -> dict | None:
+    if replay is None:
+        return None
+    depth_replay = dict(replay)
+    depth_replay["transforms"] = [
+        transform
+        for transform in replay.get("transforms", [])
+        if transform.get("__class_fullname__") in DEPTH_SPATIAL_REPLAY_TRANSFORMS
+    ]
+    return depth_replay
+
+
+def load_depth_array(image_path: Path, image_shape: tuple[int, int], depth_root: Path, fill_value: float) -> np.ndarray:
+    depth_path, _ = resolve_depth_path(image_path, depth_root)
+    if depth_path is None:
+        return np.full(image_shape, fill_value, dtype=np.float32)
+    with np.load(depth_path) as depth_data:
+        depth = depth_data["depth"].astype(np.float32)
+    return depth
+
+
+def apply_depth_replay(
+    depth: np.ndarray,
+    replay: dict | None,
+    *,
+    image_size: int,
+    depth_mean: float,
+    depth_std: float,
+) -> torch.Tensor:
+    depth_image = depth[..., None].astype(np.float32)
+    if replay is not None:
+        depth_replay = filter_replay_for_depth(replay)
+        depth_image = A.ReplayCompose.replay(depth_replay, image=depth_image)["image"]
+    else:
+        depth_image = cv2.resize(depth_image, (image_size, image_size), interpolation=cv2.INTER_LINEAR)
+    if depth_image.ndim == 2:
+        depth_image = depth_image[..., None]
+    depth_t = torch.from_numpy(depth_image.transpose(2, 0, 1)).float()
+    depth_t = depth_t.sub(float(depth_mean)).div(float(depth_std))
+    return depth_t
 
 
 class TrainSegmentationDataset(Dataset):
@@ -660,6 +799,10 @@ class TrainSegmentationDataset(Dataset):
         copy_paste_two_objects_p: float,
         copy_paste_scale_range: tuple[float, float],
         boundary_kernel_size: int,
+        depth_root: Path | None = None,
+        depth_mean: float = 0.5,
+        depth_std: float = 0.25,
+        depth_fill_value: float = 0.5,
     ):
         self.samples = samples
         self.image_size = image_size
@@ -671,6 +814,10 @@ class TrainSegmentationDataset(Dataset):
         self.copy_paste_two_objects_p = copy_paste_two_objects_p
         self.copy_paste_scale_range = copy_paste_scale_range
         self.boundary_kernel_size = boundary_kernel_size
+        self.depth_root = depth_root
+        self.depth_mean = depth_mean
+        self.depth_std = depth_std
+        self.depth_fill_value = depth_fill_value
         self.phase = "geom" if aug_mode == "geom" else "moderate"
         self.transforms_by_phase = {
             "geom": self.geom_transform,
@@ -787,6 +934,7 @@ class TrainSegmentationDataset(Dataset):
         return image, mask
 
     def __getitem__(self, idx: int) -> dict:
+        sample = self.samples[idx]
         image, mask, host_camera = self._load_raw_sample(idx)
         image, mask = self._maybe_copy_paste(image, mask, host_camera)
 
@@ -794,6 +942,16 @@ class TrainSegmentationDataset(Dataset):
         transformed = transform(image=image, mask=mask)
 
         image_t = transformed["image"].float()
+        if self.depth_root is not None:
+            depth = load_depth_array(sample.image_path, mask.shape, self.depth_root, self.depth_fill_value)
+            depth_t = apply_depth_replay(
+                depth,
+                transformed.get("replay"),
+                image_size=self.image_size,
+                depth_mean=self.depth_mean,
+                depth_std=self.depth_std,
+            )
+            image_t = torch.cat([image_t, depth_t], dim=0)
         mask_t = transformed["mask"]
         if torch.is_tensor(mask_t):
             mask_t = mask_t.float()
@@ -806,7 +964,6 @@ class TrainSegmentationDataset(Dataset):
         boundary_np = generate_boundary_mask(mask_t.squeeze(0).cpu().numpy().astype(np.uint8), self.boundary_kernel_size)
         boundary_t = torch.from_numpy(boundary_np).unsqueeze(0).float()
 
-        sample = self.samples[idx]
         return {
             "image": image_t,
             "mask": mask_t,
@@ -824,10 +981,20 @@ class ValSegmentationDataset(Dataset):
         samples: list[SegmentationSample],
         transform: A.Compose,
         boundary_kernel_size: int,
+        image_size: int,
+        depth_root: Path | None = None,
+        depth_mean: float = 0.5,
+        depth_std: float = 0.25,
+        depth_fill_value: float = 0.5,
     ):
         self.samples = samples
         self.transform = transform
         self.boundary_kernel_size = boundary_kernel_size
+        self.image_size = image_size
+        self.depth_root = depth_root
+        self.depth_mean = depth_mean
+        self.depth_std = depth_std
+        self.depth_fill_value = depth_fill_value
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -846,6 +1013,16 @@ class ValSegmentationDataset(Dataset):
 
         transformed = self.transform(image=image, mask=mask)
         image_t = transformed["image"].float()
+        if self.depth_root is not None:
+            depth = load_depth_array(sample.image_path, mask.shape, self.depth_root, self.depth_fill_value)
+            depth_t = apply_depth_replay(
+                depth,
+                transformed.get("replay"),
+                image_size=self.image_size,
+                depth_mean=self.depth_mean,
+                depth_std=self.depth_std,
+            )
+            image_t = torch.cat([image_t, depth_t], dim=0)
         mask_t = transformed["mask"]
         if torch.is_tensor(mask_t):
             mask_t = mask_t.float()
@@ -974,9 +1151,30 @@ class BoundaryHead(nn.Module):
 
 
 class SegFormerV4(nn.Module):
-    def __init__(self, backbone_name: str):
+    def __init__(self, backbone_name: str, input_channels: int = 3):
         super().__init__()
         self.encoder = SegformerModel.from_pretrained(backbone_name)
+        if input_channels != 3:
+            first_patch = self.encoder.encoder.patch_embeddings[0]
+            old_proj = first_patch.proj
+            new_proj = nn.Conv2d(
+                input_channels,
+                old_proj.out_channels,
+                kernel_size=old_proj.kernel_size,
+                stride=old_proj.stride,
+                padding=old_proj.padding,
+                bias=old_proj.bias is not None,
+            )
+            with torch.no_grad():
+                new_proj.weight[:, : old_proj.in_channels] = old_proj.weight
+                if input_channels > old_proj.in_channels:
+                    extra_channels = input_channels - old_proj.in_channels
+                    mean_weight = old_proj.weight.mean(dim=1, keepdim=True)
+                    new_proj.weight[:, old_proj.in_channels :] = mean_weight.repeat(1, extra_channels, 1, 1)
+                if old_proj.bias is not None and new_proj.bias is not None:
+                    new_proj.bias.copy_(old_proj.bias)
+            first_patch.proj = new_proj
+            self.encoder.config.num_channels = input_channels
         hidden_sizes = list(self.encoder.config.hidden_sizes)
         self.decoder = SegFormerV4Decoder(hidden_sizes=hidden_sizes)
         self.boundary_head = BoundaryHead(in_channels=hidden_sizes[0])
@@ -1567,10 +1765,19 @@ def build_dataloaders(
     config: TrainConfig,
     device: torch.device,
 ) -> tuple[TrainSegmentationDataset, DataLoader, DataLoader, DataLoader | None]:
-    geom_transform = build_geom_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
-    moderate_transform = build_moderate_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
-    heavy_transform = build_heavy_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
-    val_transform = build_val_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
+    geom_transform = build_geom_transform(
+        config.image_size, config.image_mean, config.image_std, config.resize_interpolation, replay=config.depth_enabled
+    )
+    moderate_transform = build_moderate_transform(
+        config.image_size, config.image_mean, config.image_std, config.resize_interpolation, replay=config.depth_enabled
+    )
+    heavy_transform = build_heavy_transform(
+        config.image_size, config.image_mean, config.image_std, config.resize_interpolation, replay=config.depth_enabled
+    )
+    val_transform = build_val_transform(
+        config.image_size, config.image_mean, config.image_std, config.resize_interpolation, replay=config.depth_enabled
+    )
+    depth_root = Path(config.depth_root) if config.depth_enabled else None
 
     train_dataset = TrainSegmentationDataset(
         samples=train_samples,
@@ -1583,11 +1790,20 @@ def build_dataloaders(
         copy_paste_two_objects_p=config.copy_paste_two_objects_p,
         copy_paste_scale_range=config.copy_paste_scale_range,
         boundary_kernel_size=config.boundary_kernel_size,
+        depth_root=depth_root,
+        depth_mean=config.depth_mean,
+        depth_std=config.depth_std,
+        depth_fill_value=config.depth_fill_value,
     )
     val_dataset = ValSegmentationDataset(
         samples=val_samples,
         transform=val_transform,
         boundary_kernel_size=config.boundary_kernel_size,
+        image_size=config.image_size,
+        depth_root=depth_root,
+        depth_mean=config.depth_mean,
+        depth_std=config.depth_std,
+        depth_fill_value=config.depth_fill_value,
     )
 
     train_loader = DataLoader(
@@ -1614,6 +1830,11 @@ def build_dataloaders(
             samples=extra_holdout_samples,
             transform=val_transform,
             boundary_kernel_size=config.boundary_kernel_size,
+            image_size=config.image_size,
+            depth_root=depth_root,
+            depth_mean=config.depth_mean,
+            depth_std=config.depth_std,
+            depth_fill_value=config.depth_fill_value,
         )
         extra_holdout_loader = DataLoader(
             extra_holdout_dataset,
@@ -1639,7 +1860,7 @@ def train(config: TrainConfig) -> int:
     print(f"[main] project_root: {PROJECT_ROOT}")
     print(f"[main] device: {device}")
     print(f"[main] run_dir: {config.run_dir}")
-    if config.fold == 0:
+    if config.n_splits == 3 and config.fold == 0:
         print("[main] note: fold_0 is the large single-camera validation split and behaves like a domain-shift stress test.")
     if config.aug == "heavy" and config.epochs != 80:
         print(f"[main] note: heavy schedule was designed for 80 epochs, but got epochs={config.epochs}.")
@@ -1647,7 +1868,7 @@ def train(config: TrainConfig) -> int:
     images_dir = LAB3_DATASET_ROOT / "train" / "images"
     masks_dir = LAB3_DATASET_ROOT / "train" / "masks"
     samples = collect_labeled_pairs(images_dir, masks_dir, source_name="lab3_train", sample_weight=1.0)
-    val_sample_ids = load_val_sample_ids(PROJECT_ROOT, config.fold)
+    val_sample_ids = load_val_sample_ids(PROJECT_ROOT, config.fold, n_splits=config.n_splits)
     train_samples, val_samples = split_samples_by_fold(samples, val_sample_ids)
     base_train_count = len(train_samples)
     base_val_count = len(val_samples)
@@ -1686,6 +1907,7 @@ def train(config: TrainConfig) -> int:
         )
 
     split_summary = {
+        "n_splits": config.n_splits,
         "fold": config.fold,
         "base_train_samples": base_train_count,
         "base_val_samples": base_val_count,
@@ -1698,7 +1920,7 @@ def train(config: TrainConfig) -> int:
         "extra_sources": extra_sources_summary,
     }
     print(
-        f"[main] fold {config.fold} | train={split_summary['train_samples']} | val={split_summary['val_samples']} | "
+        f"[main] fold {config.fold}/{config.n_splits - 1} | train={split_summary['train_samples']} | val={split_summary['val_samples']} | "
         f"train_cameras={len(split_summary['train_cameras'])} | val_cameras={len(split_summary['val_cameras'])}"
     )
     if extra_sources_summary:
@@ -1709,6 +1931,34 @@ def train(config: TrainConfig) -> int:
                 f"holdout_ratio={source_summary['holdout_ratio']:.3f} | "
                 f"train={source_summary['train_samples']} | holdout={source_summary['holdout_samples']} | "
                 f"root={source_summary['dataset_root']}"
+            )
+    if config.depth_enabled:
+        depth_root = Path(config.depth_root)
+        if not depth_root.exists():
+            raise FileNotFoundError(f"depth root not found: {depth_root}")
+        train_depth_summary = summarize_depth_coverage(train_samples, depth_root)
+        val_depth_summary = summarize_depth_coverage(val_samples, depth_root)
+        extra_holdout_depth_summary = summarize_depth_coverage(extra_holdout_samples, depth_root) if extra_holdout_samples else None
+        split_summary["depth"] = {
+            "depth_root": str(depth_root),
+            "depth_mean": float(config.depth_mean),
+            "depth_std": float(config.depth_std),
+            "depth_fill_value": float(config.depth_fill_value),
+            "train": train_depth_summary,
+            "val": val_depth_summary,
+            "extra_holdout": extra_holdout_depth_summary,
+        }
+        print(
+            "[main] depth=on | "
+            f"train direct={train_depth_summary['direct']} heuristic={train_depth_summary['heuristic']} missing={train_depth_summary['missing']} | "
+            f"val direct={val_depth_summary['direct']} heuristic={val_depth_summary['heuristic']} missing={val_depth_summary['missing']} | "
+            f"fill_value={config.depth_fill_value:.3f}"
+        )
+        if extra_holdout_depth_summary is not None:
+            print(
+                "[main] depth extra_holdout | "
+                f"direct={extra_holdout_depth_summary['direct']} heuristic={extra_holdout_depth_summary['heuristic']} "
+                f"missing={extra_holdout_depth_summary['missing']}"
             )
 
     config.run_dir.mkdir(parents=True, exist_ok=True)
@@ -1723,7 +1973,7 @@ def train(config: TrainConfig) -> int:
         device,
     )
 
-    model = SegFormerV4(config.backbone).to(device)
+    model = SegFormerV4(config.backbone, input_channels=config.input_channels).to(device)
     ema_model = copy.deepcopy(model).to(device)
     ema_model.eval()
     for param in ema_model.parameters():

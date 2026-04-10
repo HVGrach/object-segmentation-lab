@@ -18,6 +18,8 @@ from lab_object_segmentation.common.paths import LAB3_DATASET_ROOT, RUNS_ROOT, g
 from lab_object_segmentation.dinov2_research.backbone import DINOv2Backbone
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+
+
 def get_device() -> torch.device:
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         return torch.device("mps")
@@ -45,7 +47,7 @@ def build_transform(img_size: int) -> A.Compose:
 
 def collect_paths(input_dir: Path, stems_file: Path | None, limit: int | None) -> list[Path]:
     if stems_file is None:
-        paths = [p for p in sorted(input_dir.rglob("*")) if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
+        paths = [p for p in sorted(input_dir.glob("*")) if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
         return paths[:limit] if limit else paths
 
     stems = [line.strip() for line in stems_file.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -122,7 +124,16 @@ def main(argv: list[str] | None = None) -> int:
             with torch.no_grad():
                 tokens = backbone.extract_patch_tokens(tensor)[-1].squeeze(0)
             tokens = tokens.to(dtype=save_dtype).cpu().contiguous()
-            torch.save(tokens, out_path)
+            torch.save(
+                {
+                    "tokens": tokens,
+                    "backbone_size": args.backbone_size,
+                    "img_size": args.img_size,
+                    "patch_size": backbone.patch_size,
+                    "dtype": args.dtype,
+                },
+                out_path,
+            )
             saved += 1
             if device.type == "mps" and hasattr(torch, "mps"):
                 torch.mps.synchronize()
@@ -134,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_dir": str(output_dir),
         "backbone_size": args.backbone_size,
         "img_size": args.img_size,
+        "patch_size": backbone.patch_size,
         "dtype": args.dtype,
         "num_requested": len(image_paths),
         "num_saved": saved,

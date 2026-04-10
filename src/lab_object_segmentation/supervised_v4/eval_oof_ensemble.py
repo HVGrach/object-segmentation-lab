@@ -148,6 +148,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disable-postprocess", action="store_true", help="Disable post-processing")
     parser.add_argument("--postprocess-min-component-area", type=int, default=128)
     parser.add_argument("--disable-postprocess-fill-holes", action="store_true")
+    parser.add_argument("--n-splits", type=int, default=3, help="Number of grouped camera folds used by the evaluated runs.")
     parser.add_argument("--output-path", type=Path, default=RUN_ROOT / "oof_ensemble_search.json")
     return parser.parse_args()
 
@@ -182,18 +183,15 @@ def main() -> int:
     # Load all samples and build fold->val_ids mapping
     images_dir = LAB3_DATASET_ROOT / "train" / "images"
     masks_dir = LAB3_DATASET_ROOT / "train" / "masks"
-    all_samples = collect_labeled_pairs(images_dir, masks_dir)
+    all_samples = collect_labeled_pairs(images_dir, masks_dir, source_name="lab3_train", sample_weight=1.0)
     if args.limit is not None:
         all_samples = all_samples[: args.limit]
     print(f"Total labeled samples: {len(all_samples)}")
 
     fold_val_ids: dict[int, set[str]] = {}
-    for fold in [0, 1, 2]:
-        fold_val_ids[fold] = load_val_sample_ids(RUNS_ROOT, fold)
+    for fold in range(args.n_splits):
+        fold_val_ids[fold] = load_val_sample_ids(RUNS_ROOT, fold, n_splits=args.n_splits)
     print(f"Fold val sizes: {{{', '.join(f'{f}: {len(ids)}' for f, ids in fold_val_ids.items())}}}")
-
-    # Map image_name -> (image_path, mask_path) for quick lookup
-    sample_map: dict[str, tuple[Path, Path]] = {img.name: (img, msk) for img, msk in all_samples}
 
     # Collect all unique models needed across all presets
     all_run_names: set[str] = set()
@@ -214,7 +212,9 @@ def main() -> int:
     oof_probs: dict[str, dict[str, np.ndarray]] = {}
     oof_gt: dict[str, np.ndarray] = {}
 
-    for idx, (image_path, mask_path) in enumerate(tqdm(all_samples, desc="OOF inference")):
+    for idx, sample in enumerate(tqdm(all_samples, desc="OOF inference")):
+        image_path = sample.image_path
+        mask_path = sample.mask_path
         image_name = image_path.name
         image_rgb = np.array(Image.open(image_path).convert("RGB"))
         gt_mask = np.array(Image.open(mask_path).convert("L"))

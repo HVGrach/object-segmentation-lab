@@ -38,6 +38,12 @@ def seed_everything(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
+def seed_worker(worker_id: int):
+    worker_seed = torch.initial_seed() % (2**32)
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
 def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="DINOv2 One-Shot Segmentation Trainer")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config")
@@ -80,10 +86,17 @@ def main(argv: list[str] | None = None):
         img_size=cfg.img_size,
         cached_features_dir=cache_dir,
         debug_limit=debug_limit,
+        num_supports=cfg.val_num_supports,
+        support_seed=cfg.val_support_seed,
     )
 
     print(f"[main] train: {len(train_ds)} episodes/epoch, val: {len(val_ds)} images")
     print(f"[main] using cached features: {train_ds.use_cache}")
+
+    train_generator = torch.Generator()
+    train_generator.manual_seed(cfg.seed)
+    val_generator = torch.Generator()
+    val_generator.manual_seed(cfg.seed + 1)
 
     train_loader = DataLoader(
         train_ds,
@@ -92,6 +105,8 @@ def main(argv: list[str] | None = None):
         num_workers=cfg.num_workers,
         pin_memory=False,
         drop_last=True,
+        worker_init_fn=seed_worker if cfg.num_workers > 0 else None,
+        generator=train_generator,
     )
     val_loader = DataLoader(
         val_ds,
@@ -99,6 +114,8 @@ def main(argv: list[str] | None = None):
         shuffle=False,
         num_workers=cfg.num_workers,
         pin_memory=False,
+        worker_init_fn=seed_worker if cfg.num_workers > 0 else None,
+        generator=val_generator,
     )
 
     # Build model
@@ -110,6 +127,7 @@ def main(argv: list[str] | None = None):
         img_size=cfg.img_size,
         device=device,
         use_cached=cfg.use_cached_features and train_ds.use_cache,
+        backbone_frozen=cfg.backbone_frozen,
     )
 
     # Trainer
@@ -123,4 +141,4 @@ def main(argv: list[str] | None = None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -43,15 +45,42 @@ class OneShotModel(nn.Module):
         fusion: nn.Module,
         decoder: SegmentationDecoder,
         target_size: int = 322,
+        backbone_frozen: bool = True,
     ):
         super().__init__()
         self.backbone = backbone          # None when using cached features
         self.fusion = fusion
         self.decoder = decoder
         self.target_size = target_size
+        self.backbone_frozen = backbone_frozen
 
     def _to_spatial(self, tokens: torch.Tensor) -> torch.Tensor:
-        return DINOv2Backbone.tokens_to_spatial(tokens)
+        if tokens.ndim == 3:
+            return DINOv2Backbone.tokens_to_spatial(tokens)
+        if tokens.ndim == 4:
+            batch, supports, num_patches, channels = tokens.shape
+            spatial = DINOv2Backbone.tokens_to_spatial(tokens.reshape(batch * supports, num_patches, channels))
+            _, spatial_channels, height, width = spatial.shape
+            return spatial.reshape(batch, supports, spatial_channels, height, width)
+        raise ValueError(f"Expected token tensor with 3 or 4 dims, got shape={tuple(tokens.shape)}")
+
+    def _extract_spatial_features(self, images: torch.Tensor) -> torch.Tensor:
+        if self.backbone is None:
+            raise RuntimeError("Backbone is required for live-image mode.")
+
+        if images.ndim == 4:
+            tokens = self.backbone.extract_patch_tokens(images)[-1]
+            return self._to_spatial(tokens)
+
+        if images.ndim == 5:
+            batch, supports, channels, height, width = images.shape
+            flat_images = images.reshape(batch * supports, channels, height, width)
+            tokens = self.backbone.extract_patch_tokens(flat_images)[-1]
+            spatial = self._to_spatial(tokens)
+            _, spatial_channels, feat_h, feat_w = spatial.shape
+            return spatial.reshape(batch, supports, spatial_channels, feat_h, feat_w)
+
+        raise ValueError(f"Expected image tensor with 4 or 5 dims, got shape={tuple(images.shape)}")
 
     def forward(self, batch: dict) -> torch.Tensor:
         """Return logits [B, 1, H_target, W_target]."""
@@ -61,11 +90,10 @@ class OneShotModel(nn.Module):
             s_spatial = self._to_spatial(batch["support_feat"])
             q_spatial = self._to_spatial(batch["query_feat"])
         else:
-            with torch.no_grad():
-                s_tokens = self.backbone.extract_patch_tokens(batch["support_img"])[-1]
-                q_tokens = self.backbone.extract_patch_tokens(batch["query_img"])[-1]
-            s_spatial = self._to_spatial(s_tokens)
-            q_spatial = self._to_spatial(q_tokens)
+            grad_context = torch.no_grad if self.backbone_frozen else nullcontext
+            with grad_context():
+                s_spatial = self._extract_spatial_features(batch["support_img"])
+                q_spatial = self._extract_spatial_features(batch["query_img"])
 
         support_mask = batch["support_mask"]
 
@@ -96,6 +124,7 @@ def build_model(
     img_size: int = 322,
     device: str | torch.device = "cpu",
     use_cached: bool = True,
+    backbone_frozen: bool = True,
 ) -> OneShotModel:
     """Build a complete model from config parameters."""
     embed_dim = SIZE_TO_DIM[backbone_size]
@@ -103,7 +132,7 @@ def build_model(
     # Backbone (only needed when NOT using cached features)
     backbone = None
     if not use_cached:
-        backbone = DINOv2Backbone(size=backbone_size, device=device)
+        backbone = DINOv2Backbone(size=backbone_size, device=device, frozen=backbone_frozen)
 
     # Fusion
     fusion_cls = FUSION_REGISTRY[fusion_type]
@@ -121,5 +150,6 @@ def build_model(
         fusion=fusion,
         decoder=decoder,
         target_size=img_size,
+        backbone_frozen=backbone_frozen,
     )
     return model.to(device)

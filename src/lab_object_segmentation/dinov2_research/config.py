@@ -31,6 +31,8 @@ class Config:
     batch_size: int = 8
     num_workers: int = 0  # MPS is more stable with num_workers=0
     samples_per_epoch: int = 1000
+    val_num_supports: int = 4
+    val_support_seed: int = 42
 
     # ---- Training ----
     epochs: int = 30

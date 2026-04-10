@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import random
 from pathlib import Path
 
@@ -25,8 +26,10 @@ class _BaseOneShotDataset(Dataset):
         self.image_dir = Path(image_dir)
         self.mask_dir = Path(mask_dir)
         self.img_size = img_size
+        self.train_mode = train_mode
         self.cache_dir = Path(cached_features_dir) if cached_features_dir else None
         self.use_cache = self.cache_dir is not None and self.cache_dir.exists()
+        self.cache_manifest = self._load_cache_manifest() if self.use_cache else None
 
         aug = []
         if train_mode:
@@ -44,6 +47,19 @@ class _BaseOneShotDataset(Dataset):
             ]
         )
         self.transform = A.Compose(aug)
+
+    def _load_cache_manifest(self) -> dict | None:
+        manifest_path = self.cache_dir / "cache_manifest.json"
+        if not manifest_path.exists():
+            return None
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_img_size = manifest.get("img_size")
+        if manifest_img_size is not None and int(manifest_img_size) != self.img_size:
+            raise ValueError(
+                f"Cached features at {self.cache_dir} were built for img_size={manifest_img_size}, "
+                f"but dataset expects img_size={self.img_size}."
+            )
+        return manifest
 
     def _read_rgb(self, image_path: Path) -> np.ndarray:
         image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
@@ -63,11 +79,30 @@ class _BaseOneShotDataset(Dataset):
         transformed = self.transform(image=image, mask=mask)
         return transformed["image"], transformed["mask"].unsqueeze(0).float()
 
+    def _load_mask_only(self, stem: str) -> torch.Tensor:
+        mask = self._read_mask(self.mask_dir / f"{stem}.png")
+        mask = cv2.resize(mask, (self.img_size, self.img_size), interpolation=cv2.INTER_NEAREST)
+        return torch.from_numpy(mask).unsqueeze(0).float()
+
     def _load_cached(self, stem: str) -> torch.Tensor:
         path = self.cache_dir / f"{stem}.pt"
         if not path.exists():
             raise FileNotFoundError(f"Missing cached feature: {path}")
-        return torch.load(path, weights_only=True, map_location="cpu")
+        payload = torch.load(path, weights_only=False, map_location="cpu")
+        if torch.is_tensor(payload):
+            return payload
+        if not isinstance(payload, dict) or "tokens" not in payload:
+            raise TypeError(f"Unsupported cached feature payload in {path}")
+        payload_img_size = payload.get("img_size")
+        if payload_img_size is not None and int(payload_img_size) != self.img_size:
+            raise ValueError(
+                f"Cached feature {path.name} was built for img_size={payload_img_size}, "
+                f"but dataset expects img_size={self.img_size}."
+            )
+        tokens = payload["tokens"]
+        if not torch.is_tensor(tokens):
+            raise TypeError(f"Cached payload {path} does not contain a tensor under 'tokens'")
+        return tokens
 
 
 # ======================================================================
@@ -121,8 +156,12 @@ class OneShotTrainDataset(_BaseOneShotDataset):
         query_camera = random.choice(other_cameras)
         query_stem = random.choice(self.camera_groups[query_camera])
 
-        support_img, support_mask = self._load_image_mask(support_stem)
-        query_img, query_mask = self._load_image_mask(query_stem)
+        if self.use_cache:
+            support_mask = self._load_mask_only(support_stem)
+            query_mask = self._load_mask_only(query_stem)
+        else:
+            support_img, support_mask = self._load_image_mask(support_stem)
+            query_img, query_mask = self._load_image_mask(query_stem)
 
         batch = {
             "support_mask": support_mask,
@@ -157,6 +196,8 @@ class OneShotValDataset(_BaseOneShotDataset):
         img_size: int = 322,
         cached_features_dir: str | Path | None = None,
         debug_limit: int | None = None,
+        num_supports: int = 4,
+        support_seed: int = 42,
     ):
         super().__init__(
             image_dir=image_dir,
@@ -183,24 +224,35 @@ class OneShotValDataset(_BaseOneShotDataset):
             raise ValueError("Validation set is empty for the selected fold.")
 
         self.val_stems = val_stems
-        self.support_stem = train_stems[0] if train_stems else val_stems[0]
+        support_pool = train_stems if train_stems else val_stems
+        rng = random.Random(support_seed)
+        support_count = min(max(1, num_supports), len(support_pool))
+        self.support_stems = sorted(rng.sample(support_pool, k=support_count))
+        self.support_stem = self.support_stems[0]
 
     def __len__(self):
         return len(self.val_stems)
 
     def __getitem__(self, idx):
         query_stem = self.val_stems[idx]
-        support_img, support_mask = self._load_image_mask(self.support_stem)
-        query_img, query_mask = self._load_image_mask(query_stem)
+        if self.use_cache:
+            support_mask = torch.stack([self._load_mask_only(stem) for stem in self.support_stems], dim=0)
+            query_mask = self._load_mask_only(query_stem)
+        else:
+            support_pairs = [self._load_image_mask(stem) for stem in self.support_stems]
+            support_img = torch.stack([image for image, _ in support_pairs], dim=0)
+            support_mask = torch.stack([mask for _, mask in support_pairs], dim=0)
+            query_img, query_mask = self._load_image_mask(query_stem)
 
         batch = {
             "support_mask": support_mask,
             "query_mask": query_mask,
             "support_id": self.support_stem,
+            "support_ids": list(self.support_stems),
             "query_id": query_stem,
         }
         if self.use_cache:
-            batch["support_feat"] = self._load_cached(self.support_stem)
+            batch["support_feat"] = torch.stack([self._load_cached(stem) for stem in self.support_stems], dim=0)
             batch["query_feat"] = self._load_cached(query_stem)
             return batch
 

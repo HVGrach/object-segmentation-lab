@@ -35,6 +35,7 @@ The repository is intentionally GitHub-friendly:
 - `notebooks/` keeps the notebook-based baseline and research history.
 - `artifacts/public/` stores sanitized benchmark metadata and selected preview assets that are safe to publish.
 - `docs/` stores the public-facing narrative, generated registries, and archival notes.
+- `docs/research/EXPERIMENTAL_ENTRYPOINTS_RU.md` indexes incubating R&D launchers and utilities that are versioned but not yet canonical results.
 
 ## Reproducibility
 
@@ -141,6 +142,7 @@ The following Google Drive links are required for competition validation:
 - [External artifact links](artifacts/public/external_artifact_links.json)
 - [Competition status (RU)](docs/competition_status_ru.md)
 - [Russian deep dive](docs/project_deep_dive_ru.md)
+- [Experimental entrypoints (RU)](docs/research/EXPERIMENTAL_ENTRYPOINTS_RU.md)
 - [Deep research agenda (RU)](docs/research/DEEP_RESEARCH_AGENDA_RU.md)
 - [SOTA ideas bank (RU)](docs/research/SOTA_IDEAS_RU.md)
 - [Archive policy](docs/archive/README.md)

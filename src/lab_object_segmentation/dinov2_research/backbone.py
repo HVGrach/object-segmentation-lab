@@ -25,17 +25,19 @@ class DINOv2Backbone(nn.Module):
     Loads via torch.hub with timm fallback.  Works on MPS/CUDA/CPU.
     """
 
-    def __init__(self, size: str = "s", device: str | torch.device = "cpu"):
+    def __init__(self, size: str = "s", device: str | torch.device = "cpu", frozen: bool = True):
         super().__init__()
         self.size = size
         self.embed_dim = SIZE_TO_DIM[size]
         self.patch_size = PATCH_SIZE
         self.device = torch.device(device)
+        self.frozen = frozen
 
         self.model = self._load_model()
         self.model.eval()
-        for p in self.model.parameters():
-            p.requires_grad_(False)
+        if self.frozen:
+            for p in self.model.parameters():
+                p.requires_grad_(False)
 
     # ------------------------------------------------------------------
     def _load_model(self) -> nn.Module:
@@ -61,7 +63,6 @@ class DINOv2Backbone(nn.Module):
         return model
 
     # ------------------------------------------------------------------
-    @torch.no_grad()
     def extract_patch_tokens(self, x: torch.Tensor, n_last_layers: int = 1) -> list[torch.Tensor]:
         """Return patch tokens from last *n_last_layers* layers.
 

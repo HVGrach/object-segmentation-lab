@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import csv
 import json
 import signal
@@ -29,7 +30,7 @@ class BCEDiceLoss(nn.Module):
 
     def dice_loss(self, logits, target):
         pred = torch.sigmoid(logits)
-        smooth = 1e-6
+        smooth = 1.0
         intersection = (pred * target).sum(dim=(2, 3))
         union = pred.sum(dim=(2, 3)) + target.sum(dim=(2, 3))
         dice = (2.0 * intersection + smooth) / (union + smooth)
@@ -47,12 +48,12 @@ def compute_metrics(logits: torch.Tensor, targets: torch.Tensor, threshold: floa
     with torch.no_grad():
         preds = (torch.sigmoid(logits) > threshold).float()
         smooth = 1e-6
-        intersection = (preds * targets).sum()
-        union_dice = preds.sum() + targets.sum()
-        union_iou = preds.sum() + targets.sum() - intersection
+        intersection = (preds * targets).sum(dim=(1, 2, 3))
+        union_dice = preds.sum(dim=(1, 2, 3)) + targets.sum(dim=(1, 2, 3))
+        union_iou = preds.sum(dim=(1, 2, 3)) + targets.sum(dim=(1, 2, 3)) - intersection
 
-        dice = (2.0 * intersection + smooth) / (union_dice + smooth)
-        iou = (intersection + smooth) / (union_iou + smooth)
+        dice = ((2.0 * intersection + smooth) / (union_dice + smooth)).mean()
+        iou = ((intersection + smooth) / (union_iou + smooth)).mean()
         acc = (preds == targets).float().mean()
     return {"dice": dice.item(), "iou": iou.item(), "pixel_acc": acc.item()}
 
@@ -99,15 +100,7 @@ class Trainer:
         # Optimizer & scheduler (only trainable params)
         trainable = [p for p in model.parameters() if p.requires_grad]
         self.optimizer = torch.optim.AdamW(trainable, lr=cfg.lr, weight_decay=cfg.weight_decay)
-
-        if cfg.scheduler == "cosine":
-            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                self.optimizer, T_max=cfg.epochs, eta_min=cfg.lr * 0.01
-            )
-        else:
-            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                self.optimizer, mode="max", patience=5, factor=0.5
-            )
+        self.scheduler = self._build_scheduler()
 
         # History
         self.history: list[dict] = []
@@ -128,6 +121,21 @@ class Trainer:
             return next(iterator)
         except StopIteration as exc:
             raise RuntimeError("Dataloader is empty during preflight.") from exc
+
+    def _build_scheduler(self, remaining_epochs: int | None = None):
+        if self.cfg.scheduler == "cosine":
+            t_max = max(1, self.cfg.epochs if remaining_epochs is None else remaining_epochs)
+            return torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer,
+                T_max=t_max,
+                eta_min=self.cfg.lr * 0.01,
+            )
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode="max",
+            patience=5,
+            factor=0.5,
+        )
 
     # ------------------------------------------------------------------
     # Checkpoint management
@@ -154,9 +162,25 @@ class Trainer:
         ckpt = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
-        self.scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         self.best_iou = ckpt.get("best_iou", 0.0)
         self.start_epoch = ckpt["epoch"] + 1
+        if self.start_epoch >= self.cfg.epochs:
+            raise ValueError(
+                f"Checkpoint already reached epoch {ckpt['epoch']}; cfg.epochs={self.cfg.epochs} leaves no work to resume."
+            )
+
+        saved_config = ckpt.get("config", {})
+        saved_epochs = int(saved_config.get("epochs", self.cfg.epochs))
+        remaining_epochs = self.cfg.epochs - self.start_epoch
+
+        if self.cfg.scheduler == "cosine" and saved_epochs != self.cfg.epochs:
+            self.scheduler = self._build_scheduler(remaining_epochs=remaining_epochs)
+            print(
+                "[trainer] cosine scheduler reinitialized for resume "
+                f"(saved_epochs={saved_epochs}, new_total_epochs={self.cfg.epochs}, remaining={remaining_epochs})"
+            )
+        else:
+            self.scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         print(f"[trainer] resumed from epoch {ckpt['epoch']}, best_iou={self.best_iou:.4f}")
 
     # ------------------------------------------------------------------
@@ -183,10 +207,13 @@ class Trainer:
         }
 
         self.model.train()
-        if self.model.backbone is not None:
+        if self.model.backbone is not None and self.model.backbone_frozen:
             self.model.backbone.eval()
 
         train_batch = self._move_batch(self._iter_loader_once(train_loader))
+        model_state = copy.deepcopy(self.model.state_dict())
+        optimizer_state = copy.deepcopy(self.optimizer.state_dict())
+
         self.optimizer.zero_grad(set_to_none=True)
         train_logits = self.model(train_batch)
         train_loss = self.criterion(train_logits, train_batch["query_mask"])
@@ -196,7 +223,10 @@ class Trainer:
                 [p for p in self.model.parameters() if p.requires_grad],
                 self.cfg.grad_clip,
             )
+        self.optimizer.step()
         self.optimizer.zero_grad(set_to_none=True)
+        self.model.load_state_dict(model_state)
+        self.optimizer.load_state_dict(optimizer_state)
         self._sync_device()
         summary["train_batch_ok"] = True
         summary["train_loss"] = float(train_loss.item())
@@ -226,8 +256,8 @@ class Trainer:
 
     def _train_one_epoch(self, loader: DataLoader) -> dict:
         self.model.train()
-        # Keep backbone frozen even in train mode
-        if self.model.backbone is not None:
+        # Keep backbone frozen even in train mode when requested.
+        if self.model.backbone is not None and self.model.backbone_frozen:
             self.model.backbone.eval()
 
         total_loss = 0.0
@@ -333,7 +363,8 @@ class Trainer:
     def _train_loop(self, train_loader: DataLoader, val_loader: DataLoader):
         print(f"\n{'='*60}")
         print(f"  Experiment: {self.cfg.experiment_name}")
-        print(f"  Backbone:   DINOv2-{self.cfg.backbone_size.upper()} (frozen)")
+        backbone_mode = "frozen" if self.model.backbone_frozen else "trainable"
+        print(f"  Backbone:   DINOv2-{self.cfg.backbone_size.upper()} ({backbone_mode})")
         print(f"  Fusion:     {self.cfg.fusion_type}")
         print(f"  Epochs:     {self.cfg.epochs}")
         print(f"  Device:     {self.device}")

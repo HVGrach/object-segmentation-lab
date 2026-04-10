@@ -23,6 +23,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Training config used for the smoke run.",
     )
     parser.add_argument("--pseudo-limit", type=int, default=2, help="How many unlabeled images to pseudo-label.")
+    parser.add_argument(
+        "--min-val-iou",
+        type=float,
+        default=0.05,
+        help="Fail the smoke test if the best validation IoU stays below this floor.",
+    )
     parser.add_argument("--overwrite-cache", action="store_true", help="Force recaching of smoke features.")
     return parser.parse_args(argv)
 
@@ -52,7 +58,7 @@ def build_smoke_stems(cfg: Config) -> list[str]:
     return sorted(stems)
 
 
-def verify_outputs(cfg: Config, pseudo_output_root: Path, expected_cache_stems: list[str]):
+def verify_outputs(cfg: Config, pseudo_output_root: Path, expected_cache_stems: list[str], min_val_iou: float):
     cache_manifest = cfg.cache_dir / "cache_manifest.json"
     best_ckpt = cfg.save_dir / "checkpoints" / "best.pt"
     latest_ckpt = cfg.save_dir / "checkpoints" / "latest.pt"
@@ -71,6 +77,19 @@ def verify_outputs(cfg: Config, pseudo_output_root: Path, expected_cache_stems: 
     if missing_cached:
         raise FileNotFoundError("Smoke test missing cached feature files:\n" + "\n".join(missing_cached[:20]))
 
+    history_payload = json.loads(history.read_text(encoding="utf-8"))
+    if not history_payload:
+        raise AssertionError("Smoke history is empty.")
+    best_val_iou = max(float(row["val_iou"]) for row in history_payload)
+    if best_val_iou < min_val_iou:
+        raise AssertionError(
+            f"Smoke validation IoU is too low: best_val_iou={best_val_iou:.4f} < min_val_iou={min_val_iou:.4f}"
+        )
+
+    preflight_payload = json.loads(preflight.read_text(encoding="utf-8"))
+    if not preflight_payload.get("train_batch_ok") or not preflight_payload.get("val_batch_ok"):
+        raise AssertionError("Preflight summary indicates an incomplete train/val step.")
+
     summary = {
         "config": str(cfg.save_dir / "config.yaml"),
         "experiment_dir": str(cfg.save_dir),
@@ -78,6 +97,8 @@ def verify_outputs(cfg: Config, pseudo_output_root: Path, expected_cache_stems: 
         "num_cached_expected": len(expected_cache_stems),
         "pseudo_output_root": str(pseudo_output_root),
         "results_table": str(results_table),
+        "best_val_iou": best_val_iou,
+        "min_val_iou": min_val_iou,
     }
     summary_path = cfg.save_dir / "smoke_validation_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -129,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
 
     train_main(["--config", str(args.config)])
 
-    verify_outputs(cfg, pseudo_output_root, stems)
+    verify_outputs(cfg, pseudo_output_root, stems, args.min_val_iou)
     print("[smoke] pipeline smoke test completed successfully.")
     return 0
 
