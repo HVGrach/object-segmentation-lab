@@ -54,6 +54,11 @@
       "note": "Earlier wide6 supervised_v4 ensemble."
     },
     {
+      "submission_name": "submission_resized.csv",
+      "public_score": 0.88909,
+      "note": "Resolved external notebook try from `convnext_upernet.ipynb` + `inference_ensemble.ipynb`."
+    },
+    {
       "submission_name": "submission_blend_cnxt60_seg40_thr45.csv",
       "public_score": 0.82689,
       "note": "Legacy blend path before the notebook-faithful ConvNeXt cleanup."

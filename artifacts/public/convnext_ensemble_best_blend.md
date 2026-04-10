@@ -34,6 +34,7 @@
 - `submission_supervised_v4_top3_f014_manual_teacher075_weighted_mean_thr40_no_tta.csv`: `0.91439`
 - `submission_supervised_v4_5fold_manual_teacher075_weighted_mean_thr40_no_tta.csv`: `0.91432`
 - `submission_supervised_v4_manual_teacher075_single_thr45.csv`: `0.91242`
+- `submission_resized.csv`: `0.88909` external notebook ensemble try (`ConvNextV2-Base + UPerNet, 420x420` + `SegFormerV4, 320x320`)
 
 ## External Assets
 

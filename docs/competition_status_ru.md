@@ -32,10 +32,11 @@ PYTHONPATH=src python scripts/run_convnext_ensemble.py \
 | 5 | `submission_supervised_v4_wide6_thr50.csv` | `0.90780` | Ранний `wide6` supervised ensemble |
 | 6 | `submission_lab3_test_images_mps.csv` | `0.89694` | Классический `advanced_baseline` |
 | 7 | `submission_ans_16TTAfill.csv` | `0.89613` | Старый semi-supervised кандидат |
-| 8 | `submission_lab3_test_images_best_dice_thr040.csv` | `0.88757` | Исторический intermediate submit |
-| 9 | `submission_lab3_test_images_segformer.csv` | `0.87092` | Старый notebook-centered semi-sup submit |
-| 10 | `submission_blend_cnxt60_seg40_thr45.csv` | `0.82689` | Legacy blend path до notebook-faithful cleanup |
-| 11 | `submission_cnxt_geometric_thr45.csv` | `0.43449` | Legacy standalone ConvNeXt path, не считать честной оценкой текущего branch |
+| 8 | `submission_resized.csv` | `0.88909` | Внешний Colab ensemble try: `ConvNextV2-Base + UPerNet, 420x420` + `SegFormerV4, 320x320` |
+| 9 | `submission_lab3_test_images_best_dice_thr040.csv` | `0.88757` | Исторический intermediate submit |
+| 10 | `submission_lab3_test_images_segformer.csv` | `0.87092` | Старый notebook-centered semi-sup submit |
+| 11 | `submission_blend_cnxt60_seg40_thr45.csv` | `0.82689` | Legacy blend path до notebook-faithful cleanup |
+| 12 | `submission_cnxt_geometric_thr45.csv` | `0.43449` | Legacy standalone ConvNeXt path, не считать честной оценкой текущего branch |
 
 ## Что сломалось по пути
 
@@ -52,14 +53,23 @@ PYTHONPATH=src python scripts/run_convnext_ensemble.py \
 - Лучший чистый supervised сигнал по Kaggle все еще идет из `supervised_v4`.
 - Старые ConvNeXt standalone/public scores ниже `0.9` не отражают качество текущего notebook-faithful branch и нужны только как debug history.
 
-## Pending external check
+## Resolved external notebook check
 
-Сейчас отдельно проверяется еще один последний внешний try. Пока без подтвержденного Kaggle score он не должен подменять канонический лучший результат `0.91662`.
+Последний внешний try уже подтвержден Kaggle и теперь больше не считается `pending`.
 
-- `/Users/fgrach/convnext_upernet.ipynb`
-- `/Users/fgrach/inference_ensemble.ipynb`
+- Ноутбуки:
+  - `/Users/fgrach/convnext_upernet.ipynb`
+  - `/Users/fgrach/inference_ensemble.ipynb`
+- Upload:
+  - `submission_resized.csv`
+- Description:
+  - `ConvNextV2-Base + UPerNet, 420x420`
+  - `SegFormerV4, 320x320`
+  - `Ensemble`
+- Public score:
+  - `0.88909`
 
-Эти ноутбуки стоит трактовать как `pending external validation`, пока не придет итоговый public/private feedback.
+Вывод: это полезный подтвержденный внешний try, но он заметно ниже текущего лидера `0.91662`, поэтому канонический best submit не меняется.
 
 ## External assets для валидации соревнования
 

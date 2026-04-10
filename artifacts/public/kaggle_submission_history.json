@@ -70,6 +70,15 @@
       "note": "Older semi-supervised candidate."
     },
     {
+      "submission_name": "submission_resized.csv",
+      "status": "complete",
+      "public_score": 0.88909,
+      "uploaded_by": "n1ght6",
+      "approx_date": "2026-04-10",
+      "track": "convnext_ensemble",
+      "note": "External Colab ensemble try described as `ConvNextV2-Base + UPerNet, 420x420` with `SegFormerV4, 320x320`."
+    },
+    {
       "submission_name": "submission_lab3_test_images_best_dice_thr040.csv",
       "status": "complete",
       "public_score": 0.88757,
