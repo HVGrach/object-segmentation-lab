@@ -424,6 +424,11 @@
             "note": "Earlier wide6 supervised_v4 ensemble."
           },
           {
+            "submission_name": "submission_resized.csv",
+            "public_score": 0.88909,
+            "note": "Resolved external notebook try from `convnext_upernet.ipynb` + `inference_ensemble.ipynb`."
+          },
+          {
             "submission_name": "submission_blend_cnxt60_seg40_thr45.csv",
             "public_score": 0.82689,
             "note": "Legacy blend path before the notebook-faithful ConvNeXt cleanup."
@@ -504,6 +509,15 @@
               "approx_date": "2026-04-08",
               "track": "segformer_boundary_semisup_macos",
               "note": "Older semi-supervised candidate."
+            },
+            {
+              "submission_name": "submission_resized.csv",
+              "status": "complete",
+              "public_score": 0.88909,
+              "uploaded_by": "n1ght6",
+              "approx_date": "2026-04-10",
+              "track": "convnext_ensemble",
+              "note": "External Colab ensemble try described as `ConvNextV2-Base + UPerNet, 420x420` with `SegFormerV4, 320x320`."
             },
             {
               "submission_name": "submission_lab3_test_images_best_dice_thr040.csv",
