@@ -14,6 +14,8 @@ RUNS_ROOT = PROJECT_ROOT / "artifacts" / "runs"
 DELIVERABLES_ROOT = PROJECT_ROOT / "artifacts" / "deliverables"
 PUBLIC_ROOT = PROJECT_ROOT / "artifacts" / "public"
 SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH = PUBLIC_ROOT / "supervised_v4_hypothesis_suite_latest.json"
+SUPERVISED_V4_CURRENT_BASELINE_PUBLIC_PATH = PUBLIC_ROOT / "supervised_v4_manual_teacher075_baseline.json"
+SUPERVISED_V4_CURRENT_BASELINE_NOTES_PATH = PUBLIC_ROOT / "supervised_v4_manual_teacher075_baseline.md"
 
 
 def parse_args() -> argparse.Namespace:
@@ -114,6 +116,12 @@ def load_existing_supervised_v4_hypothesis_summary() -> dict | None:
     return read_json(SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH)
 
 
+def load_supervised_v4_current_baseline() -> dict | None:
+    if not SUPERVISED_V4_CURRENT_BASELINE_PUBLIC_PATH.exists():
+        return None
+    return read_json(SUPERVISED_V4_CURRENT_BASELINE_PUBLIC_PATH)
+
+
 def load_existing_tracks(existing_registry: dict) -> dict[str, dict]:
     if not existing_registry:
         return {}
@@ -197,6 +205,7 @@ def export_supervised_v4() -> dict:
                 "image_size": config.get("image_size"),
                 "aug": config.get("aug", "unknown"),
                 "mask_loss": infer_mask_loss(config, config.get("run_name", run_dir.name)),
+                "is_mixed_data": bool(config.get("extra_labeled_roots")),
                 "dice_tuned": metrics["dice_tuned"],
                 "dice": metrics["dice"],
                 "mIoU": metrics["mIoU"],
@@ -207,7 +216,11 @@ def export_supervised_v4() -> dict:
     if not run_rows:
         raise FileNotFoundError("No final_tta_metrics.json files found under artifacts/runs/supervised_v4")
 
-    best_run = max(run_rows, key=lambda item: (item["dice_tuned"], item["mIoU"]))
+    supervised_only_rows = [row for row in run_rows if not row["is_mixed_data"]]
+    best_run = max(
+        supervised_only_rows or run_rows,
+        key=lambda item: (item["dice_tuned"], item["mIoU"]),
+    )
     oof_rows = read_json(run_root / "oof_ensemble_eval.json")
     best_oof = max(oof_rows, key=lambda item: (item["dice"], item["iou"]))
     soup_eval = read_json(run_root / "checkpoint_soup_fold1_eval.json")
@@ -217,14 +230,16 @@ def export_supervised_v4() -> dict:
     )
     submission_summary = sanitize_value(read_json(run_root / "submission_supervised_v4_wide6_thr50_summary.json"))
     latest_hypothesis_suite = export_supervised_v4_hypothesis_suite()
+    current_baseline = load_supervised_v4_current_baseline()
 
     artifacts = [
         relative_artifact(run_root / "oof_ensemble_eval.json"),
         relative_artifact(run_root / "checkpoint_soup_fold1_eval.json"),
         relative_artifact(run_root / "submission_supervised_v4_wide6_thr50_summary.json"),
     ]
+    public_best_run = {key: value for key, value in best_run.items() if key != "is_mixed_data"}
     key_results = {
-        "best_run": best_run,
+        "best_run": public_best_run,
         "best_oof_ensemble": best_oof,
         "best_checkpoint_soup": {
             "name": best_soup_name,
@@ -238,6 +253,19 @@ def export_supervised_v4() -> dict:
             "threshold": submission_summary["threshold"],
         },
     }
+    headline = "Strongest supervised-only track built around SegFormer-B2 and a custom V4 decoder."
+    commands = {
+        "smoke": "python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5",
+        "train_help": "python scripts/train_supervised_v4.py --help",
+    }
+    details = {
+        "top_runs_by_dice_tuned": sorted(run_rows, key=lambda item: (item["dice_tuned"], item["mIoU"]), reverse=True)[:6],
+        "oof_grid": oof_rows,
+        "latest_hypothesis_suite_path": (
+            relative_artifact(SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH) if latest_hypothesis_suite is not None else None
+        ),
+    }
+    warnings: list[str] = []
 
     if latest_hypothesis_suite is not None:
         write_json(SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH, sanitize_value(latest_hypothesis_suite))
@@ -250,25 +278,51 @@ def export_supervised_v4() -> dict:
             "best_training_screen": latest_hypothesis_suite["best_training_screen"],
         }
 
+    if current_baseline is not None:
+        public_score = to_float((current_baseline.get("submission") or {}).get("kaggle_public_lb"))
+        fold_eval = current_baseline.get("local_eval", {}).get("fold1_final_tta", {})
+        holdout_eval = current_baseline.get("local_eval", {}).get("manual_extra_holdout_final_tta", {})
+        baseline_summary = {
+            "run_name": current_baseline.get("run_name"),
+            "summary": current_baseline.get("summary"),
+            "kaggle_public_lb": public_score,
+            "threshold": (current_baseline.get("submission") or {}).get("threshold"),
+            "aggregation": (current_baseline.get("submission") or {}).get("aggregation"),
+            "tta_enabled": (current_baseline.get("submission") or {}).get("tta_enabled"),
+            "fold1_dice_tuned": to_float(fold_eval.get("dice_tuned")),
+            "fold1_mIoU": to_float(fold_eval.get("mIoU")),
+            "manual_holdout_dice_tuned": to_float(holdout_eval.get("dice_tuned")),
+            "manual_holdout_mIoU": to_float(holdout_eval.get("mIoU")),
+        }
+        key_results["current_kaggle_baseline"] = baseline_summary
+        artifacts.append(relative_artifact(SUPERVISED_V4_CURRENT_BASELINE_PUBLIC_PATH))
+        if SUPERVISED_V4_CURRENT_BASELINE_NOTES_PATH.exists():
+            artifacts.append(relative_artifact(SUPERVISED_V4_CURRENT_BASELINE_NOTES_PATH))
+        inference_commands = current_baseline.get("commands", {})
+        smoke_command = inference_commands.get("inference_smoke")
+        full_command = inference_commands.get("inference_full")
+        if smoke_command:
+            commands["smoke"] = smoke_command
+        if full_command:
+            commands["current_baseline_inference"] = full_command
+        train_command = inference_commands.get("train")
+        if train_command:
+            commands["current_baseline_train"] = train_command
+        headline = current_baseline.get("headline", headline)
+        details["current_kaggle_baseline"] = current_baseline
+        warnings.extend(current_baseline.get("warnings", []))
+
     return {
         "id": "supervised_v4",
         "title": "Supervised V4",
         "status": "working",
         "category": "supervised",
-        "headline": "Strongest supervised-only track built around SegFormer-B2 and a custom V4 decoder.",
+        "headline": headline,
         "key_results": key_results,
         "artifacts": artifacts,
-        "commands": {
-            "smoke": "python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5",
-            "train_help": "python scripts/train_supervised_v4.py --help",
-        },
-        "details": {
-            "top_runs_by_dice_tuned": sorted(run_rows, key=lambda item: (item["dice_tuned"], item["mIoU"]), reverse=True)[:6],
-            "oof_grid": oof_rows,
-            "latest_hypothesis_suite_path": (
-                relative_artifact(SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH) if latest_hypothesis_suite is not None else None
-            ),
-        },
+        "commands": commands,
+        "details": details,
+        "warnings": warnings,
     }
 
 
@@ -500,6 +554,7 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
     semisup = track_map["segformer_boundary_semisup_macos"]
     dinov2 = track_map["dinov2_research"]
     latest_hypothesis_suite = supervised["key_results"].get("latest_hypothesis_suite")
+    current_baseline = supervised["key_results"].get("current_kaggle_baseline")
 
     highlights = [
         {
@@ -509,14 +564,36 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
             "metric": f"OOF Dice {advanced['key_results']['best_ensemble']['oof_dice']:.4f}",
             "note": "Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA.",
         },
-        {
-            "label": "Strongest supervised signal",
-            "track_id": supervised["id"],
-            "track_title": supervised["title"],
-            "metric": f"dice_tuned {supervised['key_results']['best_run']['dice_tuned']:.4f}",
-            "note": supervised["key_results"]["best_run"]["run_name"],
-        },
     ]
+    if current_baseline is not None:
+        highlights.append(
+            {
+                "label": "Current Kaggle baseline",
+                "track_id": supervised["id"],
+                "track_title": supervised["title"],
+                "metric": f"Public {to_float(current_baseline.get('kaggle_public_lb')):.5f}",
+                "note": current_baseline.get("run_name", "manual+teacher baseline"),
+            }
+        )
+        highlights.append(
+            {
+                "label": "Best supervised-only local signal",
+                "track_id": supervised["id"],
+                "track_title": supervised["title"],
+                "metric": f"dice_tuned {supervised['key_results']['best_run']['dice_tuned']:.4f}",
+                "note": supervised["key_results"]["best_run"]["run_name"],
+            }
+        )
+    else:
+        highlights.append(
+            {
+                "label": "Strongest supervised signal",
+                "track_id": supervised["id"],
+                "track_title": supervised["title"],
+                "metric": f"dice_tuned {supervised['key_results']['best_run']['dice_tuned']:.4f}",
+                "note": supervised["key_results"]["best_run"]["run_name"],
+            }
+        )
 
     if latest_hypothesis_suite is not None:
         best_oof = latest_hypothesis_suite.get("best_oof_overall") or {}
@@ -567,7 +644,11 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
             {
                 "track": supervised["title"],
                 "status": supervised["status"],
-                "headline_metric": f"dice_tuned {supervised['key_results']['best_run']['dice_tuned']:.4f}",
+                "headline_metric": (
+                    f"Public {to_float(current_baseline.get('kaggle_public_lb')):.5f}"
+                    if current_baseline is not None
+                    else f"dice_tuned {supervised['key_results']['best_run']['dice_tuned']:.4f}"
+                ),
                 "entrypoint": supervised["commands"]["smoke"],
             },
             {

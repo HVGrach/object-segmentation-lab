@@ -113,6 +113,11 @@ class TrainConfig:
     finetune_from: str = ""
     finetune_lr_scale: float = 0.3
     final_tta: bool = True
+    extra_labeled_roots: list[str] = field(default_factory=list)
+    extra_labeled_weights: list[float] = field(default_factory=list)
+    extra_labeled_holdout_ratios: list[float] = field(default_factory=list)
+    extra_holdout_ratio: float = 0.0
+    extra_holdout_seed: int = 42
 
     @property
     def accumulation_steps(self) -> int:
@@ -121,6 +126,14 @@ class TrainConfig:
     @property
     def run_dir(self) -> Path:
         return RUNS_ROOT / "supervised_v4" / self.run_name
+
+
+@dataclass(frozen=True)
+class SegmentationSample:
+    image_path: Path
+    mask_path: Path
+    source_name: str
+    sample_weight: float = 1.0
 
 
 def parse_args() -> TrainConfig:
@@ -155,6 +168,38 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--disable-postprocess", action="store_true", help="Disable mask post-processing during evaluation")
     parser.add_argument("--postprocess-min-component-area", type=int, default=128, help="Remove connected components smaller than this area")
     parser.add_argument("--disable-postprocess-fill-holes", action="store_true", help="Disable filling holes inside predicted masks")
+    parser.add_argument(
+        "--extra-labeled-root",
+        action="append",
+        default=[],
+        help="Optional extra labeled dataset root with images/ and masks/ folders. Can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--extra-labeled-weight",
+        action="append",
+        type=float,
+        default=[],
+        help="Optional sample-weight override(s) for --extra-labeled-root. One value broadcasts to all roots.",
+    )
+    parser.add_argument(
+        "--extra-holdout-ratio",
+        type=float,
+        default=0.0,
+        help="Optional random holdout ratio reserved from each extra labeled root for validation.",
+    )
+    parser.add_argument(
+        "--extra-labeled-holdout-ratio",
+        action="append",
+        type=float,
+        default=[],
+        help="Optional per-root holdout ratio(s) for --extra-labeled-root. Overrides --extra-holdout-ratio when provided.",
+    )
+    parser.add_argument(
+        "--extra-holdout-seed",
+        type=int,
+        default=42,
+        help="Seed for extra labeled holdout splitting.",
+    )
     args = parser.parse_args()
 
     if args.fold not in {0, 1, 2}:
@@ -165,6 +210,12 @@ def parse_args() -> TrainConfig:
         raise ValueError("effective-batch-size must be >= physical-batch-size.")
     if args.effective_batch_size % args.physical_batch_size != 0:
         raise ValueError("effective-batch-size must be divisible by physical-batch-size.")
+    if not 0.0 <= args.extra_holdout_ratio < 1.0:
+        raise ValueError("extra-holdout-ratio must be in [0, 1).")
+    if any(weight <= 0 for weight in args.extra_labeled_weight):
+        raise ValueError("extra-labeled-weight values must be positive.")
+    if any(not 0.0 <= ratio < 1.0 for ratio in args.extra_labeled_holdout_ratio):
+        raise ValueError("extra-labeled-holdout-ratio values must be in [0, 1).")
 
     return TrainConfig(
         run_name=args.run_name,
@@ -187,6 +238,11 @@ def parse_args() -> TrainConfig:
         resume=args.resume,
         finetune_from=args.finetune_from,
         finetune_lr_scale=args.finetune_lr_scale,
+        extra_labeled_roots=[str(Path(root).expanduser().resolve()) for root in args.extra_labeled_root],
+        extra_labeled_weights=[float(weight) for weight in args.extra_labeled_weight],
+        extra_labeled_holdout_ratios=[float(ratio) for ratio in args.extra_labeled_holdout_ratio],
+        extra_holdout_ratio=args.extra_holdout_ratio,
+        extra_holdout_seed=args.extra_holdout_seed,
     )
 
 
@@ -277,9 +333,15 @@ def collect_image_paths(input_dir: Path) -> list[Path]:
     return sorted([p for p in input_dir.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS])
 
 
-def collect_labeled_pairs(images_dir: Path, masks_dir: Path) -> list[tuple[Path, Path]]:
+def collect_labeled_pairs(
+    images_dir: Path,
+    masks_dir: Path,
+    *,
+    source_name: str = "lab3_train",
+    sample_weight: float = 1.0,
+) -> list[SegmentationSample]:
     image_map = {p.stem: p for p in collect_image_paths(images_dir)}
-    samples: list[tuple[Path, Path]] = []
+    samples: list[SegmentationSample] = []
     missing_images: list[str] = []
     for mask_path in sorted(masks_dir.rglob("*")):
         if not mask_path.is_file() or mask_path.suffix.lower() not in MASK_EXTS:
@@ -288,12 +350,103 @@ def collect_labeled_pairs(images_dir: Path, masks_dir: Path) -> list[tuple[Path,
         if image_path is None:
             missing_images.append(mask_path.name)
             continue
-        samples.append((image_path, mask_path))
+        samples.append(
+            SegmentationSample(
+                image_path=image_path,
+                mask_path=mask_path,
+                source_name=source_name,
+                sample_weight=float(sample_weight),
+            )
+        )
     if missing_images:
         print(f"[WARN] masks without matching images: {len(missing_images)}")
     if not samples:
         raise RuntimeError("No labeled image/mask pairs were found.")
     return samples
+
+
+def resolve_extra_weight_overrides(extra_roots: list[str], extra_weights: list[float]) -> list[float]:
+    if not extra_roots:
+        return []
+    if not extra_weights:
+        return [1.0] * len(extra_roots)
+    if len(extra_weights) == 1:
+        return [float(extra_weights[0])] * len(extra_roots)
+    if len(extra_weights) != len(extra_roots):
+        raise ValueError(
+            "extra-labeled-weight must be omitted, passed once, or matched 1:1 with extra-labeled-root."
+        )
+    return [float(weight) for weight in extra_weights]
+
+
+def resolve_extra_holdout_overrides(
+    extra_roots: list[str],
+    extra_holdout_ratios: list[float],
+    default_ratio: float,
+) -> list[float]:
+    if not extra_roots:
+        return []
+    if not extra_holdout_ratios:
+        return [float(default_ratio)] * len(extra_roots)
+    if len(extra_holdout_ratios) == 1:
+        return [float(extra_holdout_ratios[0])] * len(extra_roots)
+    if len(extra_holdout_ratios) != len(extra_roots):
+        raise ValueError(
+            "extra-labeled-holdout-ratio must be omitted, passed once, or matched 1:1 with extra-labeled-root."
+        )
+    return [float(ratio) for ratio in extra_holdout_ratios]
+
+
+def resolve_dataset_source_name(dataset_root: Path) -> str:
+    manifest_path = dataset_root / "manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            source_name = str(manifest.get("source_name", "")).strip()
+            if source_name:
+                return source_name
+        except json.JSONDecodeError:
+            print(f"[WARN] could not parse manifest.json at {manifest_path}, falling back to folder name")
+    return dataset_root.name
+
+
+def collect_dataset_root_pairs(dataset_root: Path, *, sample_weight: float) -> list[SegmentationSample]:
+    images_dir = dataset_root / "images"
+    masks_dir = dataset_root / "masks"
+    if not images_dir.exists() or not masks_dir.exists():
+        raise FileNotFoundError(
+            f"Extra labeled dataset root must contain images/ and masks/ folders: {dataset_root}"
+        )
+    source_name = resolve_dataset_source_name(dataset_root)
+    return collect_labeled_pairs(
+        images_dir,
+        masks_dir,
+        source_name=source_name,
+        sample_weight=sample_weight,
+    )
+
+
+def split_samples_random(
+    samples: list[SegmentationSample],
+    val_ratio: float,
+    seed: int,
+) -> tuple[list[SegmentationSample], list[SegmentationSample]]:
+    if not samples or val_ratio <= 0.0:
+        return samples, []
+    if len(samples) < 2:
+        raise RuntimeError("Need at least 2 extra labeled samples when extra-holdout-ratio > 0.")
+
+    indices = list(range(len(samples)))
+    rng = random.Random(seed)
+    rng.shuffle(indices)
+
+    val_count = max(1, int(round(len(samples) * val_ratio)))
+    val_count = min(len(samples) - 1, val_count)
+    val_index_set = set(indices[:val_count])
+
+    train_samples = [sample for idx, sample in enumerate(samples) if idx not in val_index_set]
+    val_samples = [sample for idx, sample in enumerate(samples) if idx in val_index_set]
+    return train_samples, val_samples
 
 
 def load_val_sample_ids(project_root: Path, fold: int) -> set[str]:
@@ -316,14 +469,21 @@ def load_val_sample_ids(project_root: Path, fold: int) -> set[str]:
             LAB3_DATASET_ROOT / "train" / "images",
             LAB3_DATASET_ROOT / "train" / "masks",
         )
-        return {image_path.name for image_path, _ in all_samples if infer_camera_group(image_path) in set(val_preview)}
+        return {
+            sample.image_path.name
+            for sample in all_samples
+            if infer_camera_group(sample.image_path) in set(val_preview)
+        }
 
     raise RuntimeError("Could not recover a complete grouped split for the requested fold.")
 
 
-def split_samples_by_fold(samples: list[tuple[Path, Path]], val_sample_ids: set[str]) -> tuple[list[tuple[Path, Path]], list[tuple[Path, Path]]]:
-    train_samples = [sample for sample in samples if sample[0].name not in val_sample_ids]
-    val_samples = [sample for sample in samples if sample[0].name in val_sample_ids]
+def split_samples_by_fold(
+    samples: list[SegmentationSample],
+    val_sample_ids: set[str],
+) -> tuple[list[SegmentationSample], list[SegmentationSample]]:
+    train_samples = [sample for sample in samples if sample.image_path.name not in val_sample_ids]
+    val_samples = [sample for sample in samples if sample.image_path.name in val_sample_ids]
     if not train_samples or not val_samples:
         raise RuntimeError("Fold split produced an empty train or validation set.")
     return train_samples, val_samples
@@ -490,7 +650,7 @@ def build_val_transform(image_size: int, mean: list[float], std: list[float], re
 class TrainSegmentationDataset(Dataset):
     def __init__(
         self,
-        samples: list[tuple[Path, Path]],
+        samples: list[SegmentationSample],
         image_size: int,
         geom_transform: A.Compose,
         moderate_transform: A.Compose,
@@ -519,8 +679,8 @@ class TrainSegmentationDataset(Dataset):
         }
 
         self.camera_to_indices: dict[str, list[int]] = {}
-        for idx, (image_path, _) in enumerate(samples):
-            self.camera_to_indices.setdefault(infer_camera_group(image_path), []).append(idx)
+        for idx, sample in enumerate(samples):
+            self.camera_to_indices.setdefault(infer_camera_group(sample.image_path), []).append(idx)
         self.cameras = sorted(self.camera_to_indices)
 
     def __len__(self) -> int:
@@ -544,10 +704,10 @@ class TrainSegmentationDataset(Dataset):
         return (mask > 127).astype(np.uint8)
 
     def _load_raw_sample(self, idx: int) -> tuple[np.ndarray, np.ndarray, str]:
-        image_path, mask_path = self.samples[idx]
-        image = self._read_image(image_path)
-        mask = self._read_mask(mask_path)
-        camera_group = infer_camera_group(image_path)
+        sample = self.samples[idx]
+        image = self._read_image(sample.image_path)
+        mask = self._read_mask(sample.mask_path)
+        camera_group = infer_camera_group(sample.image_path)
         return image, mask, camera_group
 
     def _sample_donor_index(self, host_camera: str) -> int:
@@ -646,20 +806,22 @@ class TrainSegmentationDataset(Dataset):
         boundary_np = generate_boundary_mask(mask_t.squeeze(0).cpu().numpy().astype(np.uint8), self.boundary_kernel_size)
         boundary_t = torch.from_numpy(boundary_np).unsqueeze(0).float()
 
-        image_path, _ = self.samples[idx]
+        sample = self.samples[idx]
         return {
             "image": image_t,
             "mask": mask_t,
             "boundary": boundary_t,
-            "path": str(image_path),
+            "path": str(sample.image_path),
             "camera_group": host_camera,
+            "source_name": sample.source_name,
+            "sample_weight": torch.tensor(sample.sample_weight, dtype=torch.float32),
         }
 
 
 class ValSegmentationDataset(Dataset):
     def __init__(
         self,
-        samples: list[tuple[Path, Path]],
+        samples: list[SegmentationSample],
         transform: A.Compose,
         boundary_kernel_size: int,
     ):
@@ -671,15 +833,15 @@ class ValSegmentationDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx: int) -> dict:
-        image_path, mask_path = self.samples[idx]
-        image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+        sample = self.samples[idx]
+        image = cv2.imread(str(sample.image_path), cv2.IMREAD_COLOR)
         if image is None:
-            raise FileNotFoundError(f"Could not read image: {image_path}")
+            raise FileNotFoundError(f"Could not read image: {sample.image_path}")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+        mask = cv2.imread(str(sample.mask_path), cv2.IMREAD_GRAYSCALE)
         if mask is None:
-            raise FileNotFoundError(f"Could not read mask: {mask_path}")
+            raise FileNotFoundError(f"Could not read mask: {sample.mask_path}")
         mask = (mask > 127).astype(np.uint8)
 
         transformed = self.transform(image=image, mask=mask)
@@ -700,8 +862,10 @@ class ValSegmentationDataset(Dataset):
             "image": image_t,
             "mask": mask_t,
             "boundary": boundary_t,
-            "path": str(image_path),
-            "camera_group": infer_camera_group(image_path),
+            "path": str(sample.image_path),
+            "camera_group": infer_camera_group(sample.image_path),
+            "source_name": sample.source_name,
+            "sample_weight": torch.tensor(sample.sample_weight, dtype=torch.float32),
         }
 
 
@@ -829,12 +993,29 @@ def upsample_logits(logits: torch.Tensor, size: tuple[int, int]) -> torch.Tensor
     return F.interpolate(logits, size=size, mode="bilinear", align_corners=False)
 
 
-def soft_dice_loss(logits: torch.Tensor, target: torch.Tensor, smooth: float = 1.0) -> torch.Tensor:
+def reduce_loss(losses: torch.Tensor, sample_weights: torch.Tensor | None = None) -> torch.Tensor:
+    if losses.ndim == 0:
+        return losses
+    if sample_weights is None:
+        return losses.mean()
+    weights = sample_weights.to(device=losses.device, dtype=losses.dtype).reshape(-1)
+    if weights.numel() != losses.numel():
+        raise ValueError(f"Loss/weight size mismatch: {losses.numel()} vs {weights.numel()}")
+    return (losses * weights).sum() / weights.sum().clamp_min(1e-6)
+
+
+def soft_dice_loss(
+    logits: torch.Tensor,
+    target: torch.Tensor,
+    smooth: float = 1.0,
+    *,
+    sample_weights: torch.Tensor | None = None,
+) -> torch.Tensor:
     probs = torch.sigmoid(logits)
-    intersection = (probs * target).sum(dim=(2, 3))
-    cardinality = probs.sum(dim=(2, 3)) + target.sum(dim=(2, 3))
+    intersection = (probs * target).sum(dim=(1, 2, 3))
+    cardinality = probs.sum(dim=(1, 2, 3)) + target.sum(dim=(1, 2, 3))
     dice = (2.0 * intersection + smooth) / (cardinality + smooth)
-    return 1.0 - dice.mean()
+    return reduce_loss(1.0 - dice, sample_weights)
 
 
 def lovasz_grad(gt_sorted: torch.Tensor) -> torch.Tensor:
@@ -858,12 +1039,18 @@ def lovasz_hinge_flat(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tenso
     return torch.dot(F.relu(errors_sorted), grad)
 
 
-def lovasz_hinge(logits: torch.Tensor, labels: torch.Tensor, per_image: bool = True) -> torch.Tensor:
+def lovasz_hinge(
+    logits: torch.Tensor,
+    labels: torch.Tensor,
+    per_image: bool = True,
+    *,
+    sample_weights: torch.Tensor | None = None,
+) -> torch.Tensor:
     if per_image:
         losses = []
         for logit, label in zip(logits, labels):
             losses.append(lovasz_hinge_flat(logit.reshape(-1), label.reshape(-1)))
-        return torch.stack(losses).mean()
+        return reduce_loss(torch.stack(losses), sample_weights)
     return lovasz_hinge_flat(logits.reshape(-1), labels.reshape(-1))
 
 
@@ -873,6 +1060,8 @@ def binary_focal_loss_with_logits_ls(
     gamma: float = 2.0,
     alpha_pos: float = 0.75,
     eps: float = 0.03,
+    *,
+    sample_weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
     target_smooth = target * (1.0 - eps) + 0.5 * eps
     bce = F.binary_cross_entropy_with_logits(logits, target_smooth, reduction="none")
@@ -880,29 +1069,48 @@ def binary_focal_loss_with_logits_ls(
     p_t = probs * target_smooth + (1.0 - probs) * (1.0 - target_smooth)
     focal_weight = (1.0 - p_t).pow(gamma)
     alpha_t = alpha_pos * target_smooth + (1.0 - alpha_pos) * (1.0 - target_smooth)
-    return (alpha_t * focal_weight * bce).mean()
+    losses = (alpha_t * focal_weight * bce).mean(dim=(1, 2, 3))
+    return reduce_loss(losses, sample_weights)
 
 
-def compute_mask_loss(logits: torch.Tensor, target: torch.Tensor, config: TrainConfig) -> torch.Tensor:
+def compute_mask_loss(
+    logits: torch.Tensor,
+    target: torch.Tensor,
+    config: TrainConfig,
+    *,
+    sample_weights: torch.Tensor | None = None,
+) -> torch.Tensor:
     focal = binary_focal_loss_with_logits_ls(
         logits,
         target,
         gamma=config.focal_gamma,
         alpha_pos=config.focal_alpha_pos,
         eps=config.label_smoothing,
+        sample_weights=sample_weights,
     )
     if config.mask_loss == "lovasz_focal":
-        lovasz = lovasz_hinge(logits, target, per_image=True)
+        lovasz = lovasz_hinge(logits, target, per_image=True, sample_weights=sample_weights)
         return 0.5 * lovasz + 0.5 * focal
-    dice = soft_dice_loss(logits, target)
+    dice = soft_dice_loss(logits, target, sample_weights=sample_weights)
     return 0.5 * dice + 0.5 * focal
 
 
-def compute_boundary_loss(boundary_logits: torch.Tensor, boundary_target: torch.Tensor) -> torch.Tensor:
+def compute_boundary_loss(
+    boundary_logits: torch.Tensor,
+    boundary_target: torch.Tensor,
+    *,
+    sample_weights: torch.Tensor | None = None,
+) -> torch.Tensor:
     pos_pixels = boundary_target.sum()
     neg_pixels = boundary_target.numel() - pos_pixels
     pos_weight = (neg_pixels / (pos_pixels + 1e-6)).detach()
-    return F.binary_cross_entropy_with_logits(boundary_logits, boundary_target, pos_weight=pos_weight)
+    losses = F.binary_cross_entropy_with_logits(
+        boundary_logits,
+        boundary_target,
+        pos_weight=pos_weight,
+        reduction="none",
+    ).mean(dim=(1, 2, 3))
+    return reduce_loss(losses, sample_weights)
 
 
 def compute_total_loss(
@@ -911,9 +1119,11 @@ def compute_total_loss(
     mask_target: torch.Tensor,
     boundary_target: torch.Tensor,
     config: TrainConfig,
+    *,
+    sample_weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    mask_loss = compute_mask_loss(seg_logits, mask_target, config)
-    boundary_loss = compute_boundary_loss(boundary_logits, boundary_target)
+    mask_loss = compute_mask_loss(seg_logits, mask_target, config, sample_weights=sample_weights)
+    boundary_loss = compute_boundary_loss(boundary_logits, boundary_target, sample_weights=sample_weights)
     return mask_loss + config.boundary_loss_weight * boundary_loss
 
 
@@ -1299,12 +1509,24 @@ def train_one_epoch(
         images = batch["image"].to(device, non_blocking=device.type == "cuda")
         masks = batch["mask"].to(device, non_blocking=device.type == "cuda")
         boundaries = batch["boundary"].to(device, non_blocking=device.type == "cuda")
+        sample_weights = batch["sample_weight"].to(
+            device=device,
+            dtype=torch.float32,
+            non_blocking=device.type == "cuda",
+        )
 
         with get_autocast_context(device):
             seg_logits_low, boundary_logits_low = model(images)
             seg_logits = upsample_logits(seg_logits_low, masks.shape[-2:])
             boundary_logits = upsample_logits(boundary_logits_low, boundaries.shape[-2:])
-            total_loss = compute_total_loss(seg_logits, boundary_logits, masks, boundaries, config)
+            total_loss = compute_total_loss(
+                seg_logits,
+                boundary_logits,
+                masks,
+                boundaries,
+                config,
+                sample_weights=sample_weights,
+            )
             loss = total_loss / config.accumulation_steps
 
         if scaler.is_enabled():
@@ -1338,7 +1560,13 @@ def train_one_epoch(
     }
 
 
-def build_dataloaders(train_samples: list[tuple[Path, Path]], val_samples: list[tuple[Path, Path]], config: TrainConfig, device: torch.device) -> tuple[TrainSegmentationDataset, DataLoader, DataLoader]:
+def build_dataloaders(
+    train_samples: list[SegmentationSample],
+    val_samples: list[SegmentationSample],
+    extra_holdout_samples: list[SegmentationSample],
+    config: TrainConfig,
+    device: torch.device,
+) -> tuple[TrainSegmentationDataset, DataLoader, DataLoader, DataLoader | None]:
     geom_transform = build_geom_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
     moderate_transform = build_moderate_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
     heavy_transform = build_heavy_transform(config.image_size, config.image_mean, config.image_std, config.resize_interpolation)
@@ -1380,7 +1608,23 @@ def build_dataloaders(train_samples: list[tuple[Path, Path]], val_samples: list[
         drop_last=False,
         persistent_workers=False,
     )
-    return train_dataset, train_loader, val_loader
+    extra_holdout_loader = None
+    if extra_holdout_samples:
+        extra_holdout_dataset = ValSegmentationDataset(
+            samples=extra_holdout_samples,
+            transform=val_transform,
+            boundary_kernel_size=config.boundary_kernel_size,
+        )
+        extra_holdout_loader = DataLoader(
+            extra_holdout_dataset,
+            batch_size=config.physical_batch_size,
+            shuffle=False,
+            num_workers=config.num_workers,
+            pin_memory=config.pin_memory and device.type == "cuda",
+            drop_last=False,
+            persistent_workers=False,
+        )
+    return train_dataset, train_loader, val_loader, extra_holdout_loader
 
 
 def train(config: TrainConfig) -> int:
@@ -1402,27 +1646,82 @@ def train(config: TrainConfig) -> int:
 
     images_dir = LAB3_DATASET_ROOT / "train" / "images"
     masks_dir = LAB3_DATASET_ROOT / "train" / "masks"
-    samples = collect_labeled_pairs(images_dir, masks_dir)
+    samples = collect_labeled_pairs(images_dir, masks_dir, source_name="lab3_train", sample_weight=1.0)
     val_sample_ids = load_val_sample_ids(PROJECT_ROOT, config.fold)
     train_samples, val_samples = split_samples_by_fold(samples, val_sample_ids)
+    base_train_count = len(train_samples)
+    base_val_count = len(val_samples)
+
+    extra_holdout_samples: list[SegmentationSample] = []
+    extra_sources_summary: list[dict] = []
+    extra_weight_overrides = resolve_extra_weight_overrides(config.extra_labeled_roots, config.extra_labeled_weights)
+    extra_holdout_overrides = resolve_extra_holdout_overrides(
+        config.extra_labeled_roots,
+        config.extra_labeled_holdout_ratios,
+        config.extra_holdout_ratio,
+    )
+    for source_idx, (root_str, weight, holdout_ratio) in enumerate(
+        zip(config.extra_labeled_roots, extra_weight_overrides, extra_holdout_overrides),
+        start=1,
+    ):
+        dataset_root = Path(root_str)
+        extra_samples = collect_dataset_root_pairs(dataset_root, sample_weight=weight)
+        extra_train_samples, extra_val_samples = split_samples_random(
+            extra_samples,
+            holdout_ratio,
+            seed=config.extra_holdout_seed + source_idx - 1,
+        )
+        train_samples.extend(extra_train_samples)
+        extra_holdout_samples.extend(extra_val_samples)
+        extra_sources_summary.append(
+            {
+                "dataset_root": str(dataset_root),
+                "source_name": extra_samples[0].source_name if extra_samples else dataset_root.name,
+                "sample_weight": float(weight),
+                "holdout_ratio": float(holdout_ratio),
+                "train_samples": len(extra_train_samples),
+                "holdout_samples": len(extra_val_samples),
+                "total_samples": len(extra_samples),
+            }
+        )
 
     split_summary = {
         "fold": config.fold,
+        "base_train_samples": base_train_count,
+        "base_val_samples": base_val_count,
+        "extra_train_samples": len(train_samples) - base_train_count,
+        "extra_holdout_samples": len(extra_holdout_samples),
         "train_samples": len(train_samples),
         "val_samples": len(val_samples),
-        "train_cameras": sorted({infer_camera_group(image_path) for image_path, _ in train_samples}),
-        "val_cameras": sorted({infer_camera_group(image_path) for image_path, _ in val_samples}),
+        "train_cameras": sorted({infer_camera_group(sample.image_path) for sample in train_samples}),
+        "val_cameras": sorted({infer_camera_group(sample.image_path) for sample in val_samples}),
+        "extra_sources": extra_sources_summary,
     }
     print(
         f"[main] fold {config.fold} | train={split_summary['train_samples']} | val={split_summary['val_samples']} | "
         f"train_cameras={len(split_summary['train_cameras'])} | val_cameras={len(split_summary['val_cameras'])}"
     )
+    if extra_sources_summary:
+        for source_summary in extra_sources_summary:
+            print(
+                "[main] extra_labeled "
+                f"{source_summary['source_name']} | weight={source_summary['sample_weight']:.2f} | "
+                f"holdout_ratio={source_summary['holdout_ratio']:.3f} | "
+                f"train={source_summary['train_samples']} | holdout={source_summary['holdout_samples']} | "
+                f"root={source_summary['dataset_root']}"
+            )
 
     config.run_dir.mkdir(parents=True, exist_ok=True)
     save_json(config.run_dir / "config.json", asdict(config))
     save_json(config.run_dir / "split_summary.json", split_summary)
 
-    train_dataset, train_loader, val_loader = build_dataloaders(train_samples, val_samples, config, device)
+    train_dataset, train_loader, val_loader, extra_holdout_loader = build_dataloaders(
+        train_samples,
+        val_samples,
+        extra_holdout_samples,
+        config,
+        device,
+    )
 
     model = SegFormerV4(config.backbone).to(device)
     ema_model = copy.deepcopy(model).to(device)
@@ -1473,7 +1772,8 @@ def train(config: TrainConfig) -> int:
         f"physical_bs={config.physical_batch_size} | effective_bs={config.effective_batch_size} | "
         f"accumulation={config.accumulation_steps} | mask_loss={config.mask_loss} | "
         f"resize_interp={config.resize_interpolation} | postprocess={'on' if config.postprocess_enabled else 'off'} | "
-        f"tta_ops={config.tta_ops} | tta_scales={config.tta_scales}"
+        f"tta_ops={config.tta_ops} | tta_scales={config.tta_scales} | "
+        f"extra_holdout_ratio={config.extra_holdout_ratio:.3f}"
     )
 
     for epoch_idx in range(start_epoch, config.epochs):
@@ -1501,8 +1801,14 @@ def train(config: TrainConfig) -> int:
         )
         if should_eval:
             val_metrics = evaluate(ema_model, val_loader, device, config, use_tta=False)
+            extra_holdout_metrics = (
+                evaluate(ema_model, extra_holdout_loader, device, config, use_tta=False)
+                if extra_holdout_loader is not None
+                else None
+            )
         else:
             val_metrics = {"mIoU": 0.0, "dice": 0.0, "dice_tuned": 0.0, "best_threshold": 0.0, "pixel_acc": 0.0, "boundary_f1": 0.0, "loss": 0.0, "tta": False}
+            extra_holdout_metrics = None
 
         elapsed = time.time() - t0
 
@@ -1515,6 +1821,10 @@ def train(config: TrainConfig) -> int:
             "learning_rate": current_lr,
             "time_sec": round(elapsed, 1),
         }
+        if extra_holdout_metrics is not None:
+            row["extra_holdout"] = extra_holdout_metrics
+            row["extra_holdout_dice_tuned"] = extra_holdout_metrics["dice_tuned"]
+            row["extra_holdout_mIoU"] = extra_holdout_metrics["mIoU"]
         history.append(row)
 
         is_best = False
@@ -1528,6 +1838,12 @@ def train(config: TrainConfig) -> int:
         save_json(config.run_dir / "history.json", history)
 
         if should_eval:
+            extra_holdout_suffix = ""
+            if extra_holdout_metrics is not None:
+                extra_holdout_suffix = (
+                    f" extra_holdout_dice_tuned={extra_holdout_metrics['dice_tuned']:.4f}"
+                    f" extra_holdout_mIoU={extra_holdout_metrics['mIoU']:.4f}"
+                )
             print(
                 f"[epoch {epoch_idx + 1:03d}/{config.epochs}] phase={phase} "
                 f"train_loss={row['train_loss']:.4f} "
@@ -1539,6 +1855,7 @@ def train(config: TrainConfig) -> int:
                 f"boundary_f1={row['boundary_f1']:.4f} "
                 f"lr={current_lr:.6e} "
                 f"time={elapsed:.1f}s"
+                f"{extra_holdout_suffix}"
                 + (" [best]" if is_best else "")
             )
         else:
@@ -1563,6 +1880,15 @@ def train(config: TrainConfig) -> int:
             f"dice_tuned={final_tta_metrics['dice_tuned']:.4f} "
             f"thr={final_tta_metrics['best_threshold']:.2f}"
         )
+        if extra_holdout_loader is not None:
+            extra_holdout_final_tta_metrics = evaluate(ema_model, extra_holdout_loader, device, config, use_tta=True)
+            save_json(config.run_dir / "extra_holdout_final_tta_metrics.json", extra_holdout_final_tta_metrics)
+            print(
+                f"[final_tta extra_holdout] mIoU={extra_holdout_final_tta_metrics['mIoU']:.4f} "
+                f"dice={extra_holdout_final_tta_metrics['dice']:.4f} "
+                f"dice_tuned={extra_holdout_final_tta_metrics['dice_tuned']:.4f} "
+                f"thr={extra_holdout_final_tta_metrics['best_threshold']:.2f}"
+            )
         empty_device_cache(device)
 
     print(f"[main] training complete. Artifacts -> {config.run_dir}")

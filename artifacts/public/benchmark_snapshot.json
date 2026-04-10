@@ -8,7 +8,14 @@
       "note": "Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA."
     },
     {
-      "label": "Strongest supervised signal",
+      "label": "Current Kaggle baseline",
+      "track_id": "supervised_v4",
+      "track_title": "Supervised V4",
+      "metric": "Public 0.91242",
+      "note": "segformer_b2_fold1_320_manual_v1_plus_teacher075"
+    },
+    {
+      "label": "Best supervised-only local signal",
       "track_id": "supervised_v4",
       "track_title": "Supervised V4",
       "metric": "dice_tuned 0.8959",
@@ -46,8 +53,8 @@
     {
       "track": "Supervised V4",
       "status": "working",
-      "headline_metric": "dice_tuned 0.8959",
-      "entrypoint": "python scripts/predict_supervised_v4_ensemble.py --preset wide6 --limit 5"
+      "headline_metric": "Public 0.91242",
+      "entrypoint": "python scripts/predict_supervised_v4_ensemble.py --run-names segformer_b2_fold1_320_manual_v1_plus_teacher075 --weights 1.0 --aggregation weighted_mean --threshold 0.45 --limit 5"
     },
     {
       "track": "SegFormer Boundary Semi-Supervised",
