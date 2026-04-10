@@ -12,7 +12,8 @@ The repository is intentionally GitHub-friendly:
 
 <!-- AUTO-GENERATED:BENCHMARK_SNAPSHOT_START -->
 - **Safest reproducible path**: `Advanced Baseline` with OOF Dice 0.8391. Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA.
-- **Current Kaggle baseline**: `Supervised V4` with Public 0.91242. segformer_b2_fold1_320_manual_v1_plus_teacher075
+- **Current Kaggle leader**: `ConvNeXt + SegFormer Blend` with Public 0.91662. submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv
+- **Strongest supervised baseline**: `Supervised V4` with Public 0.91242. segformer_b2_fold1_320_manual_v1_plus_teacher075
 - **Best supervised-only local signal**: `Supervised V4` with dice_tuned 0.8959. segformer_b2_fold1_384_finetune_from_moderate
 - **Latest aug sweep**: `Supervised V4` with OOF Dice 0.8684. wide6 weighted_mean without TTA; best short screen screen_night_20260404_223806_fold1_384_ft_moderate_lovasz_ls003_e8 dice_tuned 0.8912.
 - **Best semi-supervised local result**: `SegFormer Boundary Semi-Supervised` with val_mIoU 0.9047. Iteration 0 improved over the supervised phase, iteration 1 regressed.
@@ -21,6 +22,7 @@ The repository is intentionally GitHub-friendly:
 | Track | Status | Headline metric | Quick entrypoint |
 | --- | --- | --- | --- |
 | Advanced Baseline | working | OOF Dice 0.8391 | `python scripts/run_lab3_ensemble_submission.py --limit 5` |
+| ConvNeXt + SegFormer Blend | working | Public 0.91662 | `PYTHONPATH=src python scripts/run_convnext_ensemble.py --mode blend_segformer --cnxt-tta-mode full14 --segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 --threshold 0.40 --limit 5` |
 | Supervised V4 | working | Public 0.91242 | `python scripts/predict_supervised_v4_ensemble.py --run-names segformer_b2_fold1_320_manual_v1_plus_teacher075 --weights 1.0 --aggregation weighted_mean --threshold 0.45 --limit 5` |
 | SegFormer Boundary Semi-Supervised | research | val_mIoU 0.9047 | `python scripts/run_segformer_semisup_smoke_test.py` |
 | DINOv2 Research | research | best_val_iou 0.7224 | `python scripts/run_dinov2_smoke_test.py --overwrite-cache` |
@@ -40,6 +42,18 @@ The safest path to reproduce an existing result is the classic `advanced_baselin
 
 ```bash
 python scripts/run_lab3_ensemble_submission.py --limit 5
+```
+
+The current best public Kaggle submit is the ConvNeXt + SegFormer blend:
+
+```bash
+PYTHONPATH=src python scripts/run_convnext_ensemble.py \
+  --mode blend_segformer \
+  --cnxt-tta-mode full14 \
+  --segformer-recipe top3_manual_teacher075 \
+  --segformer-weight 0.65 \
+  --threshold 0.40 \
+  --limit 5
 ```
 
 The current Kaggle-backed `supervised_v4` baseline is:
@@ -98,6 +112,16 @@ The public repository does not ship raw datasets or model weights.
 - `artifacts/runs/` holds local training outputs and full experiment artifacts.
 - `artifacts/public/` holds the sanitized metadata layer that powers the README and experiment registry.
 
+## External Competition Assets
+
+The following Google Drive links are required for competition validation:
+
+- `weights_cnxt`: [Google Drive](https://drive.google.com/file/d/1IDmrtqNOVTTDqG5x6em-Ti5VmC6s4Lew/view?usp=sharing)
+- `to_pseudolabel`: [Google Drive](https://drive.google.com/file/d/1ZEB4zUigsEeG_Qd0FWpchuzxx9n5EGq_/view?usp=drive_link)
+- `depth_cache`: [Google Drive](https://drive.google.com/file/d/1SQZG7DqUDy-_Ri1MU8LZCtjl6XNfCAHU/view?usp=sharing)
+- `segformer`: [Google Drive](https://drive.google.com/file/d/1xRw_PhkSCwMUmKrdXwn9uPGfOKz3YncM/view?usp=sharing)
+- `dataset`: [Google Drive](https://drive.google.com/file/d/1WvM42wCxmNwVlxAvqVbBGtfp78PyI403/view?usp=sharing)
+
 ## Selected Visuals
 
 ![Pseudo-label review card 1](artifacts/public/previews/review_bundle/demo_card_1.png)
@@ -108,9 +132,14 @@ The public repository does not ship raw datasets or model weights.
 - [Experiment registry](docs/experiment_registry.md)
 - [Generated benchmark snapshot](docs/generated/benchmark_snapshot.json)
 - [Generated experiment registry JSON](docs/generated/experiment_registry.json)
+- [Current ConvNeXt + SegFormer best blend summary](artifacts/public/convnext_ensemble_best_blend.md)
+- [Current ConvNeXt + SegFormer best blend metadata](artifacts/public/convnext_ensemble_best_blend.json)
 - [Current supervised_v4 baseline summary](artifacts/public/supervised_v4_manual_teacher075_baseline.md)
 - [Current supervised_v4 baseline metadata](artifacts/public/supervised_v4_manual_teacher075_baseline.json)
 - [Latest supervised_v4 hypothesis suite summary](artifacts/public/supervised_v4_hypothesis_suite_latest.json)
+- [Kaggle submission history](artifacts/public/kaggle_submission_history.json)
+- [External artifact links](artifacts/public/external_artifact_links.json)
+- [Competition status (RU)](docs/competition_status_ru.md)
 - [Russian deep dive](docs/project_deep_dive_ru.md)
 - [Deep research agenda (RU)](docs/research/DEEP_RESEARCH_AGENDA_RU.md)
 - [SOTA ideas bank (RU)](docs/research/SOTA_IDEAS_RU.md)

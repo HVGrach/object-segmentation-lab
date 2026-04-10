@@ -126,7 +126,10 @@ def load_member(run_root: Path, run_name: str, weight: float, device: torch.devi
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Missing best_model.pth for run: {run_name}")
 
-    config = TrainConfig(**json.loads(config_path.read_text(encoding="utf-8")))
+    config_payload = json.loads(config_path.read_text(encoding="utf-8"))
+    # Older supervised_v4 runs were saved before n_splits became explicit in config.json.
+    config_payload.setdefault("n_splits", 3)
+    config = TrainConfig(**config_payload)
     model = SegFormerV4(config.backbone).to(device)
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     state_dict = checkpoint["ema_model_state_dict"] if checkpoint.get("ema_model_state_dict") is not None else checkpoint["model_state_dict"]

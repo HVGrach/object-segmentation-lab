@@ -8,7 +8,14 @@
       "note": "Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA."
     },
     {
-      "label": "Current Kaggle baseline",
+      "label": "Current Kaggle leader",
+      "track_id": "convnext_ensemble",
+      "track_title": "ConvNeXt + SegFormer Blend",
+      "metric": "Public 0.91662",
+      "note": "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv"
+    },
+    {
+      "label": "Strongest supervised baseline",
       "track_id": "supervised_v4",
       "track_title": "Supervised V4",
       "metric": "Public 0.91242",
@@ -49,6 +56,12 @@
       "status": "working",
       "headline_metric": "OOF Dice 0.8391",
       "entrypoint": "python scripts/run_lab3_ensemble_submission.py --limit 5"
+    },
+    {
+      "track": "ConvNeXt + SegFormer Blend",
+      "status": "working",
+      "headline_metric": "Public 0.91662",
+      "entrypoint": "PYTHONPATH=src python scripts/run_convnext_ensemble.py --mode blend_segformer --cnxt-tta-mode full14 --segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 --threshold 0.40 --limit 5"
     },
     {
       "track": "Supervised V4",

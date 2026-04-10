@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "last_updated": "2026-04-10",
+  "required_for_competition_validation": true,
+  "assets": [
+    {
+      "name": "weights_cnxt",
+      "role": "ConvNeXt weights archive",
+      "url": "https://drive.google.com/file/d/1IDmrtqNOVTTDqG5x6em-Ti5VmC6s4Lew/view?usp=sharing"
+    },
+    {
+      "name": "to_pseudolabel",
+      "role": "External to_pseudolabel bundle",
+      "url": "https://drive.google.com/file/d/1ZEB4zUigsEeG_Qd0FWpchuzxx9n5EGq_/view?usp=drive_link"
+    },
+    {
+      "name": "depth_cache",
+      "role": "Working depth_cache archive",
+      "url": "https://drive.google.com/file/d/1SQZG7DqUDy-_Ri1MU8LZCtjl6XNfCAHU/view?usp=sharing"
+    },
+    {
+      "name": "segformer",
+      "role": "SegFormer weights archive",
+      "url": "https://drive.google.com/file/d/1xRw_PhkSCwMUmKrdXwn9uPGfOKz3YncM/view?usp=sharing"
+    },
+    {
+      "name": "dataset",
+      "role": "Competition dataset archive",
+      "url": "https://drive.google.com/file/d/1WvM42wCxmNwVlxAvqVbBGtfp78PyI403/view?usp=sharing"
+    }
+  ]
+}

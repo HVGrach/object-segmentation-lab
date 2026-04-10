@@ -110,6 +110,477 @@
       }
     },
     {
+      "id": "convnext_ensemble",
+      "title": "ConvNeXt + SegFormer Blend",
+      "status": "working",
+      "category": "ensemble",
+      "headline": "Current best public blend: notebook-faithful ConvNeXt full14 mixed with a top-3 manual+teacher075 SegFormer recipe.",
+      "key_results": {
+        "best_public_submission": {
+          "submission_name": "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv",
+          "kaggle_public_lb": 0.91662,
+          "kaggle_public_lb_date": "2026-04-10",
+          "num_images": 2000,
+          "threshold": 0.4,
+          "convnext_weight": 0.35,
+          "segformer_weight": 0.65,
+          "convnext_tta_mode": "full14",
+          "convnext_image_size": 420,
+          "segformer_recipe": "top3_manual_teacher075",
+          "segformer_tta_enabled": false,
+          "postprocess_enabled": true,
+          "postprocess_min_component_area": 128,
+          "postprocess_fill_holes": true
+        },
+        "full_holdout_weight_search": {
+          "warning": "ConvNeXt blend weights are tuned on the selected validation split. This is a practical proxy unless the ConvNeXt checkpoints are confirmed to be fold-compatible with that split.",
+          "val_fold": 1,
+          "n_splits": 3,
+          "n_samples": 594,
+          "best_result": {
+            "convnext_weight": 0.35,
+            "segformer_weight": 0.65,
+            "threshold": 0.4,
+            "dice": 0.9279756682745803,
+            "iou": 0.8751655499496511,
+            "n_samples": 594
+          }
+        },
+        "segformer_anchor": {
+          "recipe": "top3_manual_teacher075",
+          "aggregation": "weighted_mean",
+          "reference_threshold": 0.4,
+          "tta_enabled": false,
+          "members": [
+            {
+              "run_name": "segformer_b2_5fold_fold0_320_manual_v1_plus_teacher075",
+              "weight": 0.3333333333333333
+            },
+            {
+              "run_name": "segformer_b2_5fold_fold1_320_manual_v1_plus_teacher075",
+              "weight": 0.3333333333333333
+            },
+            {
+              "run_name": "segformer_b2_5fold_fold4_320_manual_v1_plus_teacher075",
+              "weight": 0.3333333333333333
+            }
+          ]
+        },
+        "kaggle_submission_history": {
+          "best_public_score": 0.91662,
+          "top_completed_submissions": [
+            {
+              "submission_name": "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv",
+              "status": "complete",
+              "public_score": 0.91662,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-10",
+              "track": "convnext_ensemble",
+              "note": "Current best public result."
+            },
+            {
+              "submission_name": "submission_supervised_v4_top3_f014_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+              "status": "complete",
+              "public_score": 0.91439,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-09",
+              "track": "supervised_v4",
+              "note": "Best pure SegFormer ensemble among the tested public submissions."
+            },
+            {
+              "submission_name": "submission_supervised_v4_5fold_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+              "status": "complete",
+              "public_score": 0.91432,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-09",
+              "track": "supervised_v4",
+              "occurrences": 2,
+              "note": "Repeated upload of the same 5-fold equal-weight SegFormer ensemble."
+            },
+            {
+              "submission_name": "submission_supervised_v4_manual_teacher075_single_thr45.csv",
+              "status": "complete",
+              "public_score": 0.91242,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-08",
+              "track": "supervised_v4",
+              "note": "Strongest single-run SegFormer baseline."
+            },
+            {
+              "submission_name": "submission_supervised_v4_wide6_thr50.csv",
+              "status": "complete",
+              "public_score": 0.9078,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-04",
+              "track": "supervised_v4",
+              "note": "Earlier wide6 supervised_v4 ensemble."
+            },
+            {
+              "submission_name": "submission_lab3_test_images_mps.csv",
+              "status": "complete",
+              "public_score": 0.89694,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-03-24",
+              "track": "advanced_baseline",
+              "note": "Classic ensemble MPS inference with TTA."
+            }
+          ]
+        }
+      },
+      "artifacts": [
+        "artifacts/runs/convnext_ensemble/submission_blend_cnxt35_seg65_top3_mt075_full14_thr40_config.json",
+        "artifacts/runs/convnext_ensemble/blend_weight_search_full.json",
+        "artifacts/public/convnext_ensemble_best_blend.json",
+        "artifacts/public/convnext_ensemble_best_blend.md",
+        "artifacts/public/kaggle_submission_history.json",
+        "artifacts/public/external_artifact_links.json"
+      ],
+      "commands": {
+        "smoke": "PYTHONPATH=src python scripts/run_convnext_ensemble.py --mode blend_segformer --cnxt-tta-mode full14 --segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 --threshold 0.40 --limit 5",
+        "full_inference": "PYTHONPATH=src python scripts/run_convnext_ensemble.py --mode blend_segformer --cnxt-tta-mode full14 --segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 --threshold 0.40",
+        "weight_search_full": "PYTHONPATH=src python scripts/search_convnext_segformer_blend.py --segformer-recipe single_manual_teacher075 --cnxt-tta-mode full14 --thresholds 0.35 0.40 0.45 0.50 0.55 --weight-step 0.05 --output-path artifacts/runs/convnext_ensemble/blend_weight_search_full.json"
+      },
+      "details": {
+        "best_config": {
+          "mode": "blend_segformer",
+          "n_images": 2000,
+          "limit": 0,
+          "threshold": 0.4,
+          "weights": {
+            "convnext": 0.35,
+            "segformer": 0.65
+          },
+          "convnext": {
+            "checkpoints": [
+              "fold0_phase1_best_cnxt.pt",
+              "fold1_phase1_best_cnxt.pt"
+            ],
+            "tta_mode": "full14",
+            "image_size": 420,
+            "use_amp": true
+          },
+          "segformer": {
+            "recipe": "top3_manual_teacher075",
+            "recipe_summary": "artifacts/runs/supervised_v4/submission_supervised_v4_top3_f014_manual_teacher075_weighted_mean_thr40_no_tta_summary.json",
+            "run_root": "artifacts/runs/supervised_v4",
+            "members": [
+              {
+                "run_name": "segformer_b2_5fold_fold0_320_manual_v1_plus_teacher075",
+                "weight": 0.3333333333333333
+              },
+              {
+                "run_name": "segformer_b2_5fold_fold1_320_manual_v1_plus_teacher075",
+                "weight": 0.3333333333333333
+              },
+              {
+                "run_name": "segformer_b2_5fold_fold4_320_manual_v1_plus_teacher075",
+                "weight": 0.3333333333333333
+              }
+            ],
+            "aggregation": "weighted_mean",
+            "member_threshold": 0.5,
+            "tta_enabled": false,
+            "reference_threshold": 0.4
+          },
+          "postprocess": {
+            "enabled": true,
+            "min_component_area": 128,
+            "fill_holes": true
+          }
+        },
+        "search_grid": {
+          "thresholds": [
+            0.35,
+            0.4,
+            0.45,
+            0.5,
+            0.55
+          ],
+          "convnext_weights": [
+            0.0,
+            0.05,
+            0.1,
+            0.15,
+            0.2,
+            0.25,
+            0.3,
+            0.35,
+            0.4,
+            0.45,
+            0.5,
+            0.55,
+            0.6,
+            0.65,
+            0.7,
+            0.75,
+            0.8,
+            0.85,
+            0.9,
+            0.95,
+            1.0
+          ]
+        },
+        "top10_weight_search": [
+          {
+            "convnext_weight": 0.35,
+            "segformer_weight": 0.65,
+            "threshold": 0.4,
+            "dice": 0.9279756682745803,
+            "iou": 0.8751655499496511,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.4,
+            "segformer_weight": 0.6,
+            "threshold": 0.4,
+            "dice": 0.9277953041267716,
+            "iou": 0.8751116896253927,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.45,
+            "segformer_weight": 0.55,
+            "threshold": 0.35,
+            "dice": 0.9264743120022028,
+            "iou": 0.8728759773576358,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.3,
+            "segformer_weight": 0.7,
+            "threshold": 0.4,
+            "dice": 0.9264403560440339,
+            "iou": 0.8732501289366411,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.45,
+            "segformer_weight": 0.55,
+            "threshold": 0.4,
+            "dice": 0.9262551611004372,
+            "iou": 0.8736266772986065,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.3,
+            "segformer_weight": 0.7,
+            "threshold": 0.45,
+            "dice": 0.9261403229982208,
+            "iou": 0.8730703497826037,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.4,
+            "segformer_weight": 0.6,
+            "threshold": 0.35,
+            "dice": 0.9259535545323659,
+            "iou": 0.8720152081153182,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.25,
+            "segformer_weight": 0.75,
+            "threshold": 0.45,
+            "dice": 0.9256321752707406,
+            "iou": 0.8722457880752358,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.35,
+            "segformer_weight": 0.65,
+            "threshold": 0.35,
+            "dice": 0.9255774395552249,
+            "iou": 0.8713360046026334,
+            "n_samples": 594
+          },
+          {
+            "convnext_weight": 0.25,
+            "segformer_weight": 0.75,
+            "threshold": 0.4,
+            "dice": 0.925421420629015,
+            "iou": 0.8717235588553902,
+            "n_samples": 594
+          }
+        ],
+        "comparative_public_submissions": [
+          {
+            "submission_name": "submission_supervised_v4_top3_f014_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+            "public_score": 0.91439,
+            "note": "Best pure SegFormer ensemble among the tested supervised_v4 variants."
+          },
+          {
+            "submission_name": "submission_supervised_v4_5fold_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+            "public_score": 0.91432,
+            "note": "5-fold equal-weight SegFormer ensemble."
+          },
+          {
+            "submission_name": "submission_supervised_v4_manual_teacher075_single_thr45.csv",
+            "public_score": 0.91242,
+            "note": "Strongest single-run SegFormer baseline."
+          },
+          {
+            "submission_name": "submission_supervised_v4_wide6_thr50.csv",
+            "public_score": 0.9078,
+            "note": "Earlier wide6 supervised_v4 ensemble."
+          },
+          {
+            "submission_name": "submission_blend_cnxt60_seg40_thr45.csv",
+            "public_score": 0.82689,
+            "note": "Legacy blend path before the notebook-faithful ConvNeXt cleanup."
+          },
+          {
+            "submission_name": "submission_cnxt_geometric_thr45.csv",
+            "public_score": 0.43449,
+            "note": "Legacy standalone ConvNeXt artifact produced through the broken exporter path."
+          }
+        ],
+        "submission_history": {
+          "schema_version": 1,
+          "last_updated": "2026-04-10",
+          "source": "Curated manually from the Kaggle submissions UI after the latest public leaderboard refresh.",
+          "best_public_score": 0.91662,
+          "best_submission_name": "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv",
+          "entries": [
+            {
+              "submission_name": "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv",
+              "status": "complete",
+              "public_score": 0.91662,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-10",
+              "track": "convnext_ensemble",
+              "note": "Current best public result."
+            },
+            {
+              "submission_name": "submission_supervised_v4_top3_f014_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+              "status": "complete",
+              "public_score": 0.91439,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-09",
+              "track": "supervised_v4",
+              "note": "Best pure SegFormer ensemble among the tested public submissions."
+            },
+            {
+              "submission_name": "submission_supervised_v4_5fold_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+              "status": "complete",
+              "public_score": 0.91432,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-09",
+              "track": "supervised_v4",
+              "occurrences": 2,
+              "note": "Repeated upload of the same 5-fold equal-weight SegFormer ensemble."
+            },
+            {
+              "submission_name": "submission_supervised_v4_manual_teacher075_single_thr45.csv",
+              "status": "complete",
+              "public_score": 0.91242,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-08",
+              "track": "supervised_v4",
+              "note": "Strongest single-run SegFormer baseline."
+            },
+            {
+              "submission_name": "submission_supervised_v4_wide6_thr50.csv",
+              "status": "complete",
+              "public_score": 0.9078,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-04",
+              "track": "supervised_v4",
+              "note": "Earlier wide6 supervised_v4 ensemble."
+            },
+            {
+              "submission_name": "submission_lab3_test_images_mps.csv",
+              "status": "complete",
+              "public_score": 0.89694,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-03-24",
+              "track": "advanced_baseline",
+              "note": "Classic ensemble MPS inference with TTA."
+            },
+            {
+              "submission_name": "submission_ans_16TTAfill.csv",
+              "status": "complete",
+              "public_score": 0.89613,
+              "uploaded_by": "n1ght6",
+              "approx_date": "2026-04-08",
+              "track": "segformer_boundary_semisup_macos",
+              "note": "Older semi-supervised candidate."
+            },
+            {
+              "submission_name": "submission_lab3_test_images_best_dice_thr040.csv",
+              "status": "complete",
+              "public_score": 0.88757,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-03-31",
+              "track": "advanced_baseline",
+              "note": "Historical earlier submission before the stronger supervised_v4 runs."
+            },
+            {
+              "submission_name": "submission_lab3_test_images_segformer.csv",
+              "status": "complete",
+              "public_score": 0.87092,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-03-27",
+              "track": "segformer_boundary_semisup_macos",
+              "note": "Final test submission from the older notebook-centered semi-supervised branch."
+            },
+            {
+              "submission_name": "submission_blend_cnxt60_seg40_thr45.csv",
+              "status": "complete",
+              "public_score": 0.82689,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-10",
+              "track": "convnext_ensemble",
+              "note": "Legacy blend path before the notebook-faithful ConvNeXt cleanup."
+            },
+            {
+              "submission_name": "submission_cnxt_geometric_thr45.csv",
+              "status": "complete",
+              "public_score": 0.43449,
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-10",
+              "track": "convnext_ensemble",
+              "note": "Legacy standalone ConvNeXt artifact produced through the broken exporter path."
+            },
+            {
+              "submission_name": "submission_cnxt_geometric_thr45.csv",
+              "status": "error",
+              "uploaded_by": "Fedor Grach",
+              "approx_date": "2026-04-10",
+              "track": "convnext_ensemble",
+              "occurrences": 3,
+              "observed_errors": [
+                "Submission contains null values",
+                "ID column ImageId not found in submission"
+              ],
+              "note": "Multiple failed uploads before the ConvNeXt exporter and CSV contract were fixed."
+            },
+            {
+              "submission_name": "submission_ans_16TTAfill.csv",
+              "status": "error",
+              "uploaded_by": "n1ght6",
+              "approx_date": "2026-04-08",
+              "track": "segformer_boundary_semisup_macos",
+              "occurrences": 1,
+              "note": "Rejected upload; Kaggle error text was not preserved."
+            },
+            {
+              "submission_name": "submission.csv",
+              "status": "error",
+              "uploaded_by": "n1ght6",
+              "approx_date": "2026-04-08",
+              "track": "unknown",
+              "occurrences": 1,
+              "note": "Rejected upload; Kaggle error text was not preserved."
+            }
+          ]
+        }
+      },
+      "warnings": [
+        "ConvNeXt checkpoints are external notebook-trained artifacts; the strongest practical evidence is the public leaderboard score plus the local holdout search, not a clean in-repo CV benchmark.",
+        "Do not compare the old standalone ConvNeXt uploads directly to the notebook-faithful blend path; the early exporter produced malformed or semantically broken submissions."
+      ]
+    },
+    {
       "id": "supervised_v4",
       "title": "Supervised V4",
       "status": "working",
@@ -254,6 +725,58 @@
             "tta": true
           },
           {
+            "run_name": "segformer_b2_5fold_fold1_320_manual_v1_plus_teacher075",
+            "fold": 1,
+            "image_size": 320,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "is_mixed_data": true,
+            "dice_tuned": 0.9127085767270411,
+            "dice": 0.9126287119678029,
+            "mIoU": 0.9214213959277683,
+            "best_threshold": 0.45,
+            "tta": true
+          },
+          {
+            "run_name": "segformer_b2_5fold_fold0_320_manual_v1_plus_teacher075",
+            "fold": 0,
+            "image_size": 320,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "is_mixed_data": true,
+            "dice_tuned": 0.911594429057978,
+            "dice": 0.9085267676741926,
+            "mIoU": 0.911787349793509,
+            "best_threshold": 0.4,
+            "tta": true
+          },
+          {
+            "run_name": "segformer_b3_5fold_fold1_320_manual_v1_plus_teacher075",
+            "fold": 1,
+            "image_size": 320,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "is_mixed_data": true,
+            "dice_tuned": 0.9100303802595286,
+            "dice": 0.9100303802595286,
+            "mIoU": 0.9198585020356008,
+            "best_threshold": 0.5,
+            "tta": true
+          },
+          {
+            "run_name": "segformer_b2_5fold_fold1_384_manual_v1_plus_teacher075",
+            "fold": 1,
+            "image_size": 384,
+            "aug": "moderate",
+            "mask_loss": "lovasz_focal",
+            "is_mixed_data": true,
+            "dice_tuned": 0.8993674160233144,
+            "dice": 0.8982817950636517,
+            "mIoU": 0.9113970387228365,
+            "best_threshold": 0.45,
+            "tta": true
+          },
+          {
             "run_name": "segformer_b2_fold1_384_finetune_from_moderate",
             "fold": 1,
             "image_size": 384,
@@ -264,58 +787,6 @@
             "dice": 0.8898094141333135,
             "mIoU": 0.9013437319030186,
             "best_threshold": 0.75,
-            "tta": true
-          },
-          {
-            "run_name": "segformer_b2_fold1_320_moderate_lovasz_ls003_ema",
-            "fold": 1,
-            "image_size": 320,
-            "aug": "moderate",
-            "mask_loss": "lovasz_focal",
-            "is_mixed_data": false,
-            "dice_tuned": 0.8944630710232085,
-            "dice": 0.8923951576160347,
-            "mIoU": 0.9042598064324275,
-            "best_threshold": 0.55,
-            "tta": true
-          },
-          {
-            "run_name": "segformer_b2_fold1_384_finetune_lovasz",
-            "fold": 1,
-            "image_size": 384,
-            "aug": "moderate",
-            "mask_loss": "lovasz_focal",
-            "is_mixed_data": false,
-            "dice_tuned": 0.8916195985951128,
-            "dice": 0.8885664781144037,
-            "mIoU": 0.9007803121441316,
-            "best_threshold": 0.6,
-            "tta": true
-          },
-          {
-            "run_name": "segformer_b2_fold0_320_moderate_lovasz_ls003_ema",
-            "fold": 0,
-            "image_size": 320,
-            "aug": "moderate",
-            "mask_loss": "lovasz_focal",
-            "is_mixed_data": false,
-            "dice_tuned": 0.891379806641372,
-            "dice": 0.8897263998734615,
-            "mIoU": 0.8958182591429744,
-            "best_threshold": 0.45,
-            "tta": true
-          },
-          {
-            "run_name": "segformer_b2_fold1_320_moderate_ls003_ema",
-            "fold": 1,
-            "image_size": 320,
-            "aug": "moderate",
-            "mask_loss": "dice_focal",
-            "is_mixed_data": false,
-            "dice_tuned": 0.8913428257223409,
-            "dice": 0.8849110663497665,
-            "mIoU": 0.8974502627102363,
-            "best_threshold": 0.7,
             "tta": true
           }
         ],

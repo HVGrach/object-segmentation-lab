@@ -16,6 +16,10 @@ PUBLIC_ROOT = PROJECT_ROOT / "artifacts" / "public"
 SUPERVISED_V4_HYPOTHESIS_PUBLIC_PATH = PUBLIC_ROOT / "supervised_v4_hypothesis_suite_latest.json"
 SUPERVISED_V4_CURRENT_BASELINE_PUBLIC_PATH = PUBLIC_ROOT / "supervised_v4_manual_teacher075_baseline.json"
 SUPERVISED_V4_CURRENT_BASELINE_NOTES_PATH = PUBLIC_ROOT / "supervised_v4_manual_teacher075_baseline.md"
+CONVNEXT_ENSEMBLE_PUBLIC_PATH = PUBLIC_ROOT / "convnext_ensemble_best_blend.json"
+CONVNEXT_ENSEMBLE_NOTES_PATH = PUBLIC_ROOT / "convnext_ensemble_best_blend.md"
+KAGGLE_SUBMISSION_HISTORY_PUBLIC_PATH = PUBLIC_ROOT / "kaggle_submission_history.json"
+EXTERNAL_ARTIFACT_LINKS_PUBLIC_PATH = PUBLIC_ROOT / "external_artifact_links.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -120,6 +124,18 @@ def load_supervised_v4_current_baseline() -> dict | None:
     if not SUPERVISED_V4_CURRENT_BASELINE_PUBLIC_PATH.exists():
         return None
     return read_json(SUPERVISED_V4_CURRENT_BASELINE_PUBLIC_PATH)
+
+
+def load_convnext_ensemble_best() -> dict | None:
+    if not CONVNEXT_ENSEMBLE_PUBLIC_PATH.exists():
+        return None
+    return read_json(CONVNEXT_ENSEMBLE_PUBLIC_PATH)
+
+
+def load_kaggle_submission_history() -> dict | None:
+    if not KAGGLE_SUBMISSION_HISTORY_PUBLIC_PATH.exists():
+        return None
+    return read_json(KAGGLE_SUBMISSION_HISTORY_PUBLIC_PATH)
 
 
 def load_existing_tracks(existing_registry: dict) -> dict[str, dict]:
@@ -323,6 +339,115 @@ def export_supervised_v4() -> dict:
         "commands": commands,
         "details": details,
         "warnings": warnings,
+    }
+
+
+def export_convnext_ensemble() -> dict:
+    run_root = RUNS_ROOT / "convnext_ensemble"
+    best_config_path = run_root / "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40_config.json"
+    search_path = run_root / "blend_weight_search_full.json"
+
+    best_config = read_json(best_config_path)
+    search_summary = read_json(search_path)
+    current_best = load_convnext_ensemble_best()
+    kaggle_history = load_kaggle_submission_history()
+
+    if current_best is None:
+        raise FileNotFoundError(CONVNEXT_ENSEMBLE_PUBLIC_PATH)
+
+    history_entries = (kaggle_history or {}).get("entries", [])
+    completed_entries = sorted(
+        [
+            entry
+            for entry in history_entries
+            if entry.get("status") == "complete" and entry.get("public_score") is not None
+        ],
+        key=lambda entry: to_float(entry.get("public_score")),
+        reverse=True,
+    )
+
+    commands = current_best.get("commands", {})
+    if not commands:
+        commands = {
+            "smoke": (
+                "PYTHONPATH=src python scripts/run_convnext_ensemble.py "
+                "--mode blend_segformer --cnxt-tta-mode full14 "
+                "--segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 "
+                "--threshold 0.40 --limit 5"
+            ),
+            "full_inference": (
+                "PYTHONPATH=src python scripts/run_convnext_ensemble.py "
+                "--mode blend_segformer --cnxt-tta-mode full14 "
+                "--segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 "
+                "--threshold 0.40"
+            ),
+            "weight_search_full": (
+                "PYTHONPATH=src python scripts/search_convnext_segformer_blend.py "
+                "--segformer-recipe single_manual_teacher075 --cnxt-tta-mode full14 "
+                "--thresholds 0.35 0.40 0.45 0.50 0.55 "
+                "--weight-step 0.05 "
+                "--output-path artifacts/runs/convnext_ensemble/blend_weight_search_full.json"
+            ),
+        }
+
+    artifacts = [
+        relative_artifact(best_config_path),
+        relative_artifact(search_path),
+        relative_artifact(CONVNEXT_ENSEMBLE_PUBLIC_PATH),
+    ]
+    if CONVNEXT_ENSEMBLE_NOTES_PATH.exists():
+        artifacts.append(relative_artifact(CONVNEXT_ENSEMBLE_NOTES_PATH))
+    if KAGGLE_SUBMISSION_HISTORY_PUBLIC_PATH.exists():
+        artifacts.append(relative_artifact(KAGGLE_SUBMISSION_HISTORY_PUBLIC_PATH))
+    if EXTERNAL_ARTIFACT_LINKS_PUBLIC_PATH.exists():
+        artifacts.append(relative_artifact(EXTERNAL_ARTIFACT_LINKS_PUBLIC_PATH))
+
+    key_results = {
+        "best_public_submission": current_best["submission"],
+        "full_holdout_weight_search": {
+            "warning": search_summary.get("warning"),
+            "val_fold": search_summary.get("val_fold"),
+            "n_splits": search_summary.get("n_splits"),
+            "n_samples": search_summary.get("n_samples"),
+            "best_result": search_summary.get("best_result"),
+        },
+        "segformer_anchor": {
+            "recipe": best_config["segformer"]["recipe"],
+            "aggregation": best_config["segformer"]["aggregation"],
+            "reference_threshold": best_config["segformer"]["reference_threshold"],
+            "tta_enabled": best_config["segformer"]["tta_enabled"],
+            "members": best_config["segformer"]["members"],
+        },
+    }
+    if kaggle_history is not None:
+        key_results["kaggle_submission_history"] = {
+            "best_public_score": kaggle_history.get("best_public_score"),
+            "top_completed_submissions": completed_entries[:6],
+        }
+
+    details = {
+        "best_config": best_config,
+        "search_grid": search_summary.get("search_grid"),
+        "top10_weight_search": search_summary.get("top10"),
+        "comparative_public_submissions": current_best.get("comparative_public_submissions", []),
+    }
+    if kaggle_history is not None:
+        details["submission_history"] = kaggle_history
+
+    return {
+        "id": "convnext_ensemble",
+        "title": "ConvNeXt + SegFormer Blend",
+        "status": "working",
+        "category": "ensemble",
+        "headline": current_best.get(
+            "headline",
+            "Notebook-faithful ConvNeXt full14 blended with a top-3 manual+teacher075 SegFormer recipe.",
+        ),
+        "key_results": key_results,
+        "artifacts": artifacts,
+        "commands": commands,
+        "details": details,
+        "warnings": current_best.get("warnings", []),
     }
 
 
@@ -550,6 +675,7 @@ def export_dinov2_research() -> dict:
 def build_benchmark_snapshot(tracks: list[dict]) -> dict:
     track_map = {track["id"]: track for track in tracks}
     advanced = track_map["advanced_baseline"]
+    convnext = track_map.get("convnext_ensemble")
     supervised = track_map["supervised_v4"]
     semisup = track_map["segformer_boundary_semisup_macos"]
     dinov2 = track_map["dinov2_research"]
@@ -565,10 +691,21 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
             "note": "Grouped-by-camera 3-fold ensemble with EMA, threshold tuning, and TTA.",
         },
     ]
+    if convnext is not None:
+        best_public_submission = convnext["key_results"].get("best_public_submission") or {}
+        highlights.append(
+            {
+                "label": "Current Kaggle leader",
+                "track_id": convnext["id"],
+                "track_title": convnext["title"],
+                "metric": f"Public {to_float(best_public_submission.get('kaggle_public_lb')):.5f}",
+                "note": best_public_submission.get("submission_name", "best blend submission"),
+            }
+        )
     if current_baseline is not None:
         highlights.append(
             {
-                "label": "Current Kaggle baseline",
+                "label": "Strongest supervised baseline",
                 "track_id": supervised["id"],
                 "track_title": supervised["title"],
                 "metric": f"Public {to_float(current_baseline.get('kaggle_public_lb')):.5f}",
@@ -632,15 +769,26 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
         ]
     )
 
-    return {
-        "highlights": highlights,
-        "table": [
+    table = [
+        {
+            "track": advanced["title"],
+            "status": advanced["status"],
+            "headline_metric": f"OOF Dice {advanced['key_results']['best_ensemble']['oof_dice']:.4f}",
+            "entrypoint": advanced["commands"]["smoke"],
+        }
+    ]
+    if convnext is not None:
+        best_public_submission = convnext["key_results"].get("best_public_submission") or {}
+        table.append(
             {
-                "track": advanced["title"],
-                "status": advanced["status"],
-                "headline_metric": f"OOF Dice {advanced['key_results']['best_ensemble']['oof_dice']:.4f}",
-                "entrypoint": advanced["commands"]["smoke"],
-            },
+                "track": convnext["title"],
+                "status": convnext["status"],
+                "headline_metric": f"Public {to_float(best_public_submission.get('kaggle_public_lb')):.5f}",
+                "entrypoint": convnext["commands"]["smoke"],
+            }
+        )
+    table.extend(
+        [
             {
                 "track": supervised["title"],
                 "status": supervised["status"],
@@ -663,7 +811,12 @@ def build_benchmark_snapshot(tracks: list[dict]) -> dict:
                 "headline_metric": f"best_val_iou {dinov2['key_results']['best_ablation']['best_val_iou']:.4f}",
                 "entrypoint": dinov2["commands"]["smoke"],
             },
-        ],
+        ]
+    )
+
+    return {
+        "highlights": highlights,
+        "table": table,
     }
 
 
@@ -720,6 +873,7 @@ def main() -> int:
 
     tracks = [
         with_fallback("advanced_baseline", export_advanced_baseline, existing_tracks, args.allow_missing_sources),
+        with_fallback("convnext_ensemble", export_convnext_ensemble, existing_tracks, args.allow_missing_sources),
         with_fallback("supervised_v4", export_supervised_v4, existing_tracks, args.allow_missing_sources),
         with_fallback(
             "segformer_boundary_semisup_macos",

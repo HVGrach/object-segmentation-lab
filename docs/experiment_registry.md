@@ -44,6 +44,149 @@ This document is generated from the publish-safe metadata in `artifacts/public/`
 - `artifacts/runs/advanced_baseline/folds_summary.json`
 - `artifacts/runs/advanced_baseline/submission_lab3_test_images_mps_summary.json`
 
+## ConvNeXt + SegFormer Blend
+
+- Status: `working`
+- Category: `ensemble`
+- Summary: Current best public blend: notebook-faithful ConvNeXt full14 mixed with a top-3 manual+teacher075 SegFormer recipe.
+
+### Key Results
+
+```json
+{
+  "best_public_submission": {
+    "submission_name": "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv",
+    "kaggle_public_lb": 0.91662,
+    "kaggle_public_lb_date": "2026-04-10",
+    "num_images": 2000,
+    "threshold": 0.4,
+    "convnext_weight": 0.35,
+    "segformer_weight": 0.65,
+    "convnext_tta_mode": "full14",
+    "convnext_image_size": 420,
+    "segformer_recipe": "top3_manual_teacher075",
+    "segformer_tta_enabled": false,
+    "postprocess_enabled": true,
+    "postprocess_min_component_area": 128,
+    "postprocess_fill_holes": true
+  },
+  "full_holdout_weight_search": {
+    "warning": "ConvNeXt blend weights are tuned on the selected validation split. This is a practical proxy unless the ConvNeXt checkpoints are confirmed to be fold-compatible with that split.",
+    "val_fold": 1,
+    "n_splits": 3,
+    "n_samples": 594,
+    "best_result": {
+      "convnext_weight": 0.35,
+      "segformer_weight": 0.65,
+      "threshold": 0.4,
+      "dice": 0.9279756682745803,
+      "iou": 0.8751655499496511,
+      "n_samples": 594
+    }
+  },
+  "segformer_anchor": {
+    "recipe": "top3_manual_teacher075",
+    "aggregation": "weighted_mean",
+    "reference_threshold": 0.4,
+    "tta_enabled": false,
+    "members": [
+      {
+        "run_name": "segformer_b2_5fold_fold0_320_manual_v1_plus_teacher075",
+        "weight": 0.3333333333333333
+      },
+      {
+        "run_name": "segformer_b2_5fold_fold1_320_manual_v1_plus_teacher075",
+        "weight": 0.3333333333333333
+      },
+      {
+        "run_name": "segformer_b2_5fold_fold4_320_manual_v1_plus_teacher075",
+        "weight": 0.3333333333333333
+      }
+    ]
+  },
+  "kaggle_submission_history": {
+    "best_public_score": 0.91662,
+    "top_completed_submissions": [
+      {
+        "submission_name": "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv",
+        "status": "complete",
+        "public_score": 0.91662,
+        "uploaded_by": "Fedor Grach",
+        "approx_date": "2026-04-10",
+        "track": "convnext_ensemble",
+        "note": "Current best public result."
+      },
+      {
+        "submission_name": "submission_supervised_v4_top3_f014_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+        "status": "complete",
+        "public_score": 0.91439,
+        "uploaded_by": "Fedor Grach",
+        "approx_date": "2026-04-09",
+        "track": "supervised_v4",
+        "note": "Best pure SegFormer ensemble among the tested public submissions."
+      },
+      {
+        "submission_name": "submission_supervised_v4_5fold_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+        "status": "complete",
+        "public_score": 0.91432,
+        "uploaded_by": "Fedor Grach",
+        "approx_date": "2026-04-09",
+        "track": "supervised_v4",
+        "occurrences": 2,
+        "note": "Repeated upload of the same 5-fold equal-weight SegFormer ensemble."
+      },
+      {
+        "submission_name": "submission_supervised_v4_manual_teacher075_single_thr45.csv",
+        "status": "complete",
+        "public_score": 0.91242,
+        "uploaded_by": "Fedor Grach",
+        "approx_date": "2026-04-08",
+        "track": "supervised_v4",
+        "note": "Strongest single-run SegFormer baseline."
+      },
+      {
+        "submission_name": "submission_supervised_v4_wide6_thr50.csv",
+        "status": "complete",
+        "public_score": 0.9078,
+        "uploaded_by": "Fedor Grach",
+        "approx_date": "2026-04-04",
+        "track": "supervised_v4",
+        "note": "Earlier wide6 supervised_v4 ensemble."
+      },
+      {
+        "submission_name": "submission_lab3_test_images_mps.csv",
+        "status": "complete",
+        "public_score": 0.89694,
+        "uploaded_by": "Fedor Grach",
+        "approx_date": "2026-03-24",
+        "track": "advanced_baseline",
+        "note": "Classic ensemble MPS inference with TTA."
+      }
+    ]
+  }
+}
+```
+
+### Commands
+
+- `smoke`: `PYTHONPATH=src python scripts/run_convnext_ensemble.py --mode blend_segformer --cnxt-tta-mode full14 --segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 --threshold 0.40 --limit 5`
+- `full_inference`: `PYTHONPATH=src python scripts/run_convnext_ensemble.py --mode blend_segformer --cnxt-tta-mode full14 --segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 --threshold 0.40`
+- `weight_search_full`: `PYTHONPATH=src python scripts/search_convnext_segformer_blend.py --segformer-recipe single_manual_teacher075 --cnxt-tta-mode full14 --thresholds 0.35 0.40 0.45 0.50 0.55 --weight-step 0.05 --output-path artifacts/runs/convnext_ensemble/blend_weight_search_full.json`
+
+### Source Artifacts
+
+- `artifacts/runs/convnext_ensemble/submission_blend_cnxt35_seg65_top3_mt075_full14_thr40_config.json`
+- `artifacts/runs/convnext_ensemble/blend_weight_search_full.json`
+- `artifacts/public/convnext_ensemble_best_blend.json`
+- `artifacts/public/convnext_ensemble_best_blend.md`
+- `artifacts/public/kaggle_submission_history.json`
+- `artifacts/public/external_artifact_links.json`
+
+### Warnings
+
+- ConvNeXt checkpoints are external notebook-trained artifacts; the strongest practical evidence is the public leaderboard score plus the local holdout search, not a clean in-repo CV benchmark.
+- Do not compare the old standalone ConvNeXt uploads directly to the notebook-faithful blend path; the early exporter produced malformed or semantically broken submissions.
+
 ## Supervised V4
 
 - Status: `working`

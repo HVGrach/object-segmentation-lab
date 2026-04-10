@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "track_id": "convnext_ensemble",
+  "headline": "Current best public blend: notebook-faithful ConvNeXt full14 mixed with a top-3 manual+teacher075 SegFormer recipe.",
+  "summary": "After replacing the early reverse-engineered ConvNeXt exporter with a notebook-faithful inference path and retuning the blend on a labeled holdout, `submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv` became the current public leader.",
+  "submission": {
+    "submission_name": "submission_blend_cnxt35_seg65_top3_mt075_full14_thr40.csv",
+    "kaggle_public_lb": 0.91662,
+    "kaggle_public_lb_date": "2026-04-10",
+    "num_images": 2000,
+    "threshold": 0.4,
+    "convnext_weight": 0.35,
+    "segformer_weight": 0.65,
+    "convnext_tta_mode": "full14",
+    "convnext_image_size": 420,
+    "segformer_recipe": "top3_manual_teacher075",
+    "segformer_tta_enabled": false,
+    "postprocess_enabled": true,
+    "postprocess_min_component_area": 128,
+    "postprocess_fill_holes": true
+  },
+  "local_search": {
+    "val_fold": 1,
+    "n_splits": 3,
+    "n_samples": 594,
+    "best_result": {
+      "convnext_weight": 0.35,
+      "segformer_weight": 0.65,
+      "threshold": 0.4,
+      "dice": 0.9279756682745803,
+      "iou": 0.8751655499496511,
+      "n_samples": 594
+    }
+  },
+  "comparative_public_submissions": [
+    {
+      "submission_name": "submission_supervised_v4_top3_f014_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+      "public_score": 0.91439,
+      "note": "Best pure SegFormer ensemble among the tested supervised_v4 variants."
+    },
+    {
+      "submission_name": "submission_supervised_v4_5fold_manual_teacher075_weighted_mean_thr40_no_tta.csv",
+      "public_score": 0.91432,
+      "note": "5-fold equal-weight SegFormer ensemble."
+    },
+    {
+      "submission_name": "submission_supervised_v4_manual_teacher075_single_thr45.csv",
+      "public_score": 0.91242,
+      "note": "Strongest single-run SegFormer baseline."
+    },
+    {
+      "submission_name": "submission_supervised_v4_wide6_thr50.csv",
+      "public_score": 0.9078,
+      "note": "Earlier wide6 supervised_v4 ensemble."
+    },
+    {
+      "submission_name": "submission_blend_cnxt60_seg40_thr45.csv",
+      "public_score": 0.82689,
+      "note": "Legacy blend path before the notebook-faithful ConvNeXt cleanup."
+    },
+    {
+      "submission_name": "submission_cnxt_geometric_thr45.csv",
+      "public_score": 0.43449,
+      "note": "Legacy standalone ConvNeXt artifact produced through the broken exporter path."
+    }
+  ],
+  "commands": {
+    "smoke": "PYTHONPATH=src python scripts/run_convnext_ensemble.py --mode blend_segformer --cnxt-tta-mode full14 --segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 --threshold 0.40 --limit 5",
+    "full_inference": "PYTHONPATH=src python scripts/run_convnext_ensemble.py --mode blend_segformer --cnxt-tta-mode full14 --segformer-recipe top3_manual_teacher075 --segformer-weight 0.65 --threshold 0.40",
+    "weight_search_full": "PYTHONPATH=src python scripts/search_convnext_segformer_blend.py --segformer-recipe single_manual_teacher075 --cnxt-tta-mode full14 --thresholds 0.35 0.40 0.45 0.50 0.55 --weight-step 0.05 --output-path artifacts/runs/convnext_ensemble/blend_weight_search_full.json"
+  },
+  "validation_checks": [
+    "The current best blend submission was generated for all 2000 test images.",
+    "The best blend weights came from a full holdout search on 594 labeled validation images.",
+    "Submission format was validated after fixing the early ConvNeXt exporter bugs."
+  ],
+  "warnings": [
+    "ConvNeXt checkpoints are external notebook-trained artifacts; the strongest practical evidence is the public leaderboard score plus the local holdout search, not a clean in-repo CV benchmark.",
+    "Do not compare the old standalone ConvNeXt uploads directly to the notebook-faithful blend path; the early exporter produced malformed or semantically broken submissions."
+  ],
+  "local_artifacts": {
+    "best_submission_config": "artifacts/runs/convnext_ensemble/submission_blend_cnxt35_seg65_top3_mt075_full14_thr40_config.json",
+    "weight_search_summary": "artifacts/runs/convnext_ensemble/blend_weight_search_full.json",
+    "submission_history": "artifacts/public/kaggle_submission_history.json",
+    "external_asset_links": "artifacts/public/external_artifact_links.json"
+  }
+}
